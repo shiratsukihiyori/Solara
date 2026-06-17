@@ -16,6 +16,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <script src="js/i18n.js"></script>
     <script>
         (function () {
             const ua = navigator.userAgent || "";
@@ -119,58 +120,60 @@
         <div class="header">
             <h1>Solara</h1>
             <div class="warning">Made by Wet Dream Boy，免费API来自GD音乐台(music.gdstudio.xyz)，仅供学习交流使用，请支持正版音乐奥！</div>
-            <div class="theme-switch-wrapper">
+            <div class="header-left-controls">
                 <button id="themeToggleButton" class="theme-toggle-button" type="button" aria-label="切换深浅色模式">
                     <i class="fas fa-sun theme-icon theme-icon--sun" aria-hidden="true"></i>
                     <i class="fas fa-moon theme-icon theme-icon--moon" aria-hidden="true"></i>
                 </button>
             </div>
+            <div class="theme-switch-wrapper">
+                <button id="openSettingsBtn" class="theme-toggle-button" type="button" aria-label="设置" title="设置（或双击Logo）">
+                    <i class="fas fa-cog" aria-hidden="true"></i>
+                </button>
+            </div>
         </div>
 
         <div class="search-area" id="searchArea">
-            <button type="button" class="mobile-close-btn" id="mobileSearchClose" aria-label="关闭搜索">
-                <i class="fas fa-times" aria-hidden="true"></i>
-            </button>
-            <div class="search-container">
-                <input type="text" id="searchInput" class="search-input" placeholder="搜索歌曲、歌手或专辑...">
-                <div class="source-select-wrapper" id="sourceSelectWrapper">
-                    <button id="sourceSelectButton" class="source-select-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
-                        <span id="sourceSelectLabel">网易云音乐</span>
-                        <i class="fas fa-chevron-down caret-icon" aria-hidden="true"></i>
-                    </button>
-                    <div id="sourceMenu" class="source-menu" role="listbox" aria-labelledby="sourceSelectButton"></div>
+            <div class="search-header">
+                <h2 class="search-title">探索音乐</h2>
+                <button type="button" class="mobile-close-btn" id="mobileSearchClose" aria-label="关闭搜索">
+                    <i class="fas fa-times" aria-hidden="true"></i>
+                </button>
+            </div>
+            <div class="search-controls-wrapper">
+                <div class="search-bar-unified">
+                    <div class="search-input-wrapper">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" id="searchInput" class="search-input" placeholder="搜索歌曲、歌手或专辑...">
+                    </div>
+                    <div class="source-select-wrapper" id="sourceSelectWrapper">
+                        <button id="sourceSelectButton" class="source-select-btn" type="button" aria-haspopup="listbox" aria-expanded="false">
+                            <span id="sourceSelectLabel">网易云</span>
+                            <i class="fas fa-chevron-down caret-icon" aria-hidden="true"></i>
+                        </button>
+                        <div id="sourceMenu" class="source-menu" role="listbox" aria-labelledby="sourceSelectButton"></div>
+                    </div>
                 </div>
                 <button id="searchBtn" class="search-btn">
                     <i class="fas fa-search"></i>
                     <span>搜索</span>
                 </button>
-            </div>
-            <div id="searchResults" class="search-results">
                 <div class="search-results-toolbar">
                     <div class="import-dropdown">
-                        <button
-                            id="importSelectedBtn"
-                            class="import-selected-btn"
-                            type="button"
-                            disabled
-                            aria-haspopup="menu"
-                            aria-expanded="false"
-                        >
-                            <i class="fas fa-file-import" aria-hidden="true"></i>
-                            <span class="import-selected-label">导入已选</span>
-                            <span id="importSelectedCount" class="import-selected-count" aria-hidden="true"></span>
-                            <i class="fas fa-caret-down import-dropdown-caret" aria-hidden="true"></i>
+                        <button class="import-selected-btn" id="importSelectedBtn" disabled>
+                            <i class="fas fa-file-import"></i>
+                            <span>导入已选</span>
+                            <span id="importSelectedCount" class="import-selected-count"></span>
+                            <i class="fas fa-chevron-down import-dropdown-caret"></i>
                         </button>
-                        <div class="import-dropdown-menu" id="importSelectedMenu" role="menu" hidden>
-                            <button id="importToPlaylist" class="import-dropdown-item" type="button" role="menuitem">
-                                导入到播放列表
-                            </button>
-                            <button id="importToFavorites" class="import-dropdown-item" type="button" role="menuitem">
-                                导入到收藏列表
-                            </button>
+                        <div class="import-dropdown-menu" id="importSelectedMenu" hidden>
+                            <button class="import-dropdown-item" id="importToPlaylist" data-action="playlist">导入到播放列表</button>
+                            <button class="import-dropdown-item" id="importToFavorites" data-action="favorites">导入到收藏列表</button>
                         </div>
                     </div>
                 </div>
+            </div>
+            <div id="searchResults" class="search-results">
                 <div id="searchResultsList" class="search-results-list"></div>
             </div>
         </div>
@@ -502,6 +505,30 @@
     <div class="mobile-overlay-scrim" id="mobileOverlayScrim"></div>
 
     <audio id="audioPlayer" preload="metadata" playsinline></audio>
+
+<!-- 设置模态框 -->
+<div id="settingsModal" class="modal-overlay" aria-hidden="true">
+    <div class="modal-content settings-content">
+        <div class="modal-header">
+            <h2>设置</h2>
+            <button id="closeSettingsBtn" class="close-modal-btn" aria-label="关闭设置">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <section class="settings-section">
+                <h3>探索雷达风格</h3>
+                <p class="settings-hint">选择您喜欢的音乐风格，探索雷达将从中为您推荐歌曲。</p>
+                <div id="radarGenreList" class="genre-grid">
+                    <!-- 风格复选框将通过 JS 动态生成 -->
+                </div>
+            </section>
+        </div>
+        <div class="modal-footer">
+            <button id="saveSettingsBtn" class="save-settings-btn">保存设置</button>
+        </div>
+    </div>
+</div>
 
 <!-- 通知容器 -->
 <div id="notification" class="notification"></div>

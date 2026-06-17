@@ -83,10 +83,39 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
   });
 }
 
-async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
+async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise: Promise<any>) => void): Promise<Response> {
+  const cache = caches.default;
+  
+  // 构建缓存 Key（完整 URL 和原始方法，但过滤掉每次随机的防缓存签名 s）
+  const cacheUrl = new URL(url.toString());
+  cacheUrl.searchParams.delete("s");
+  
+  const cacheKey = new Request(cacheUrl.toString(), {
+    method: request.method,
+    headers: request.headers
+  });
+
+  // 如果是 GET 请求，尝试命中缓存
+  if (request.method === "GET") {
+    try {
+      const cachedResponse = await cache.match(cacheKey);
+      if (cachedResponse) {
+        console.log(`[Cache HIT] ${url.toString()}`);
+        const response = new Response(cachedResponse.body, cachedResponse);
+        response.headers.set("X-Cache-Status", "HIT");
+        response.headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
+        return response;
+      }
+    } catch (err) {
+      console.warn(`[Cache ERROR] ${url.toString()}`, err);
+    }
+  }
+
+  console.log(`[Cache MISS] Fetching from upstream: ${url.toString()}`);
+
   const apiUrl = new URL(API_BASE_URL);
   url.searchParams.forEach((value, key) => {
-    if (key === "target" || key === "callback") {
+    if (key === "target" || key === "callback" || key === "s") {
       return;
     }
     apiUrl.searchParams.set(key, value);
@@ -103,19 +132,49 @@ async function proxyApiRequest(url: URL, request: Request): Promise<Response> {
     },
   });
 
+  const responseText = await upstream.text();
   const headers = createCorsHeaders(upstream.headers);
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json; charset=utf-8");
   }
 
-  return new Response(upstream.body, {
+  headers.set("X-Cache-Status", "MISS");
+  headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
+
+  // 判断是否应该缓存：必须是 200 状态，且内容不能是空数组或包含错误标识
+  const isSearch = url.searchParams.get("types") === "search";
+  const isEmptyResult = responseText.trim() === "[]";
+  const isError = responseText.includes('"error"') || responseText.includes('"status":0');
+  
+  let shouldCache = upstream.status === 200 && request.method === "GET" && !isError;
+  
+  // 如果是搜索请求且结果为空，通常是 API 繁忙或异常，不建议长缓存
+  if (isSearch && isEmptyResult) {
+    shouldCache = false;
+  }
+
+  if (shouldCache) {
+    headers.set("Cache-Control", "public, s-maxage=300, max-age=300");
+  } else {
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  }
+
+  const response = new Response(responseText, {
     status: upstream.status,
     statusText: upstream.statusText,
     headers,
   });
+
+  // 写入缓存（不阻塞主流程）
+  if (shouldCache && waitUntil) {
+    waitUntil(cache.put(cacheKey, response.clone()));
+    console.log(`[Cache PUT] Saved to cache: ${url.toString()}`);
+  }
+
+  return response;
 }
 
-export async function onRequest({ request }: { request: Request }): Promise<Response> {
+export async function onRequest({ request, waitUntil }: { request: Request, waitUntil: (promise: Promise<any>) => void }): Promise<Response> {
   if (request.method === "OPTIONS") {
     return handleOptions();
   }
@@ -131,5 +190,5 @@ export async function onRequest({ request }: { request: Request }): Promise<Resp
     return proxyKuwoAudio(target, request);
   }
 
-  return proxyApiRequest(url, request);
+  return proxyApiRequest(url, request, waitUntil);
 }

@@ -77,6 +77,12 @@ const dom = {
     importFavoritesInput: document.getElementById("importFavoritesInput"),
     clearFavoritesBtn: document.getElementById("clearFavoritesBtn"),
     currentFavoriteToggle: document.getElementById("currentFavoriteToggle"),
+    settingsModal: document.getElementById("settingsModal"),
+    closeSettingsBtn: document.getElementById("closeSettingsBtn"),
+    saveSettingsBtn: document.getElementById("saveSettingsBtn"),
+    openSettingsBtn: document.getElementById("openSettingsBtn"),
+    radarGenreList: document.getElementById("radarGenreList"),
+    logo: document.querySelector(".header h1"),
 };
 
 window.SolaraDom = dom;
@@ -367,6 +373,7 @@ const STORAGE_KEYS_TO_SYNC = new Set([
     "favoritePlaybackTime",
     "searchSource",
     "lastSearchState.v1",
+    "radarSettings",
 ]);
 
 function createPersistentStorageClient() {
@@ -643,7 +650,8 @@ function buildAudioProxyUrl(url) {
 const SOURCE_OPTIONS = [
     { value: "netease", label: "网易云音乐" },
     { value: "kuwo", label: "酷我音乐" },
-    { value: "joox", label: "JOOX音乐" }
+    { value: "joox", label: "JOOX音乐" },
+    { value: "bilibili", label: "哔哩哔哩" }
 ];
 
 function normalizeSource(value) {
@@ -778,6 +786,17 @@ const API = {
 
             if (!response.ok) {
                 throw new Error(`Request failed with status ${response.status}`);
+            }
+
+            const cacheStatus = response.headers.get("X-Cache-Status");
+            if (cacheStatus) {
+                const urlObj = new URL(url, window.location.origin);
+                const type = urlObj.searchParams.get("types") || "未知接口";
+                if (cacheStatus === "HIT") {
+                    debugLog(`[边缘缓存] 命中接口数据: ${type}`);
+                } else if (cacheStatus === "MISS") {
+                    debugLog(`[穿透回源] 拉取接口数据: ${type}`);
+                }
             }
 
             const text = await response.text();
@@ -943,20 +962,61 @@ const state = {
 
 let importSelectedMenuOutsideHandler = null;
 
-if (state.currentList === "favorite" && (!Array.isArray(state.favoriteSongs) || state.favoriteSongs.length === 0)) {
+/**
+ * 状态自洽性检查：
+ * 如果当前指向的播放列表为空，则清除当前歌曲状态，防止“幽灵播放”
+ */
+function validateStateConsistency() {
+    const isPlaylistEmpty = () => {
+        if (state.currentPlaylist === 'playlist') return state.playlistSongs.length === 0;
+        if (state.currentPlaylist === 'favorites') return state.favoriteSongs.length === 0;
+        if (state.currentPlaylist === 'search') return state.searchResults.length === 0;
+        if (state.currentPlaylist === 'online') return state.onlineSongs.length === 0;
+        return false;
+    };
+
+    if (isPlaylistEmpty() && state.currentSong !== null) {
+        debugLog("检测到列表为空，清除幽灵播放歌曲");
+        state.currentSong = null;
+        state.currentTrackIndex = -1;
+        state.currentAudioUrl = null;
+        state.currentPlaybackTime = 0;
+        
+        // 更新本地持久化
+        safeRemoveLocalStorage("currentSong", { skipRemote: true });
+        safeSetLocalStorage("currentTrackIndex", "-1", { skipRemote: true });
+        
+        // 更新 UI (如果 DOM 已加载)
+        if (dom.currentSongTitle) dom.currentSongTitle.textContent = "选择一首歌曲开始播放";
+        if (dom.currentSongArtist) dom.currentSongArtist.textContent = "未知艺术家";
+        if (typeof showAlbumCoverPlaceholder === "function") showAlbumCoverPlaceholder();
+        if (typeof updateMobileToolbarTitle === "function") updateMobileToolbarTitle();
+        if (typeof updatePlayPauseButton === "function") updatePlayPauseButton();
+    }
+}
+
+// 规范化收藏夹数据
+state.favoriteSongs = (typeof ensureFavoriteSongsArray === "function" ? ensureFavoriteSongsArray() : (state.favoriteSongs || []))
+    .map((song) => (typeof sanitizeImportedSong === "function" ? sanitizeImportedSong(song) : song) || song)
+    .filter((song) => song && typeof song === "object");
+
+// 确保 currentList 状态正确
+if (state.currentList === "favorite" && state.favoriteSongs.length === 0) {
     state.currentList = "playlist";
 }
 if (state.currentList === "favorite") {
     state.currentPlaylist = "favorites";
 }
-state.favoriteSongs = ensureFavoriteSongsArray()
-    .map((song) => sanitizeImportedSong(song) || song)
-    .filter((song) => song && typeof song === "object");
-if (!Array.isArray(state.favoriteSongs) || state.favoriteSongs.length === 0) {
+
+// 修正收藏夹索引
+if (state.favoriteSongs.length === 0) {
     state.currentFavoriteIndex = 0;
 } else if (state.currentFavoriteIndex >= state.favoriteSongs.length) {
     state.currentFavoriteIndex = state.favoriteSongs.length - 1;
 }
+
+// 启动时执行一次自洽性检查
+validateStateConsistency();
 saveFavoriteState();
 
 async function bootstrapPersistentStorage() {
@@ -967,6 +1027,8 @@ async function bootstrapPersistentStorage() {
             return;
         }
         applyPersistentSnapshotFromRemote(snapshot.data);
+        // 远程同步后再次检查自洽性
+        validateStateConsistency();
     } catch (error) {
         console.warn("加载远程存储失败", error);
     } finally {
@@ -987,6 +1049,17 @@ function applyPersistentSnapshotFromRemote(data) {
             state.playlistSongs = playlist;
             safeSetLocalStorage("playlistSongs", data.playlistSongs, { skipRemote: true });
             playlistUpdated = true;
+        }
+    }
+
+    if (typeof data.radarSettings === "string") {
+        const radarSettings = parseJSON(data.radarSettings, null);
+        if (radarSettings) {
+            state.radarSettings = radarSettings;
+            safeSetLocalStorage("radarSettings", data.radarSettings, { skipRemote: true });
+            if (typeof applySettingsToUI === "function") {
+                applySettingsToUI();
+            }
         }
     }
 
@@ -1545,6 +1618,15 @@ function captureThemeDefaults() {
 
     const initialIsDark = document.body.classList.contains("dark-mode");
     document.body.classList.remove("dark-mode");
+
+    const oldBg = document.documentElement.style.getPropertyValue("--bg-gradient");
+    const oldPrimary = document.documentElement.style.getPropertyValue("--primary-color");
+    const oldPrimaryDark = document.documentElement.style.getPropertyValue("--primary-color-dark");
+    
+    document.documentElement.style.removeProperty("--bg-gradient");
+    document.documentElement.style.removeProperty("--primary-color");
+    document.documentElement.style.removeProperty("--primary-color-dark");
+
     const lightStyles = getComputedStyle(document.body);
     themeDefaults.light.gradient = lightStyles.getPropertyValue("--bg-gradient").trim();
     themeDefaults.light.primaryColor = lightStyles.getPropertyValue("--primary-color").trim();
@@ -1559,6 +1641,10 @@ function captureThemeDefaults() {
     if (!initialIsDark) {
         document.body.classList.remove("dark-mode");
     }
+
+    if (oldBg) document.documentElement.style.setProperty("--bg-gradient", oldBg);
+    if (oldPrimary) document.documentElement.style.setProperty("--primary-color", oldPrimary);
+    if (oldPrimaryDark) document.documentElement.style.setProperty("--primary-color-dark", oldPrimaryDark);
 
     state.themeDefaultsCaptured = true;
 }
@@ -1821,6 +1907,249 @@ function setAlbumCoverImage(url) {
     }
 }
 
+// --- 客户端调色板提取核心算法 (从 palette.ts 移植) ---
+const PALETTE_MAX_DIMENSION = 96;
+const PALETTE_TARGET_SAMPLE_COUNT = 2400;
+
+function paletteClamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+}
+
+function paletteComponentToHex(value) {
+    const clamped = paletteClamp(Math.round(value), 0, 255);
+    return clamped.toString(16).padStart(2, "0");
+}
+
+function paletteRgbToHex({ r, g, b }) {
+    return `#${paletteComponentToHex(r)}${paletteComponentToHex(g)}${paletteComponentToHex(b)}`;
+}
+
+function paletteRgbToHsl(r, g, b) {
+    const rNorm = paletteClamp(r / 255, 0, 1);
+    const gNorm = paletteClamp(g / 255, 0, 1);
+    const bNorm = paletteClamp(b / 255, 0, 1);
+
+    const max = Math.max(rNorm, gNorm, bNorm);
+    const min = Math.min(rNorm, gNorm, bNorm);
+    const delta = max - min;
+
+    let h = 0;
+    if (delta !== 0) {
+        if (max === rNorm) {
+            h = ((gNorm - bNorm) / delta) % 6;
+        } else if (max === gNorm) {
+            h = (bNorm - rNorm) / delta + 2;
+        } else {
+            h = (rNorm - gNorm) / delta + 4;
+        }
+        h *= 60;
+        if (h < 0) {
+            h += 360;
+        }
+    }
+
+    const l = (max + min) / 2;
+    const s = delta === 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+
+    return { h, s, l };
+}
+
+function paletteHueToRgb(p, q, t) {
+    if (t < 0) t += 1;
+    if (t > 1) t -= 1;
+    if (t < 1 / 6) return p + (q - p) * 6 * t;
+    if (t < 1 / 2) return q;
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+    return p;
+}
+
+function paletteHslToRgb(h, s, l) {
+    const saturation = paletteClamp(s, 0, 1);
+    const lightness = paletteClamp(l, 0, 1);
+
+    const normalizedHue = ((h % 360) + 360) % 360 / 360;
+
+    if (saturation === 0) {
+        const value = lightness * 255;
+        return { r: value, g: value, b: value };
+    }
+
+    const q = lightness < 0.5
+        ? lightness * (1 + saturation)
+        : lightness + saturation - lightness * saturation;
+    const p = 2 * lightness - q;
+
+    const r = paletteHueToRgb(p, q, normalizedHue + 1 / 3) * 255;
+    const g = paletteHueToRgb(p, q, normalizedHue) * 255;
+    const b = paletteHueToRgb(p, q, normalizedHue - 1 / 3) * 255;
+
+    return { r, g, b };
+}
+
+function paletteHslToHex(color) {
+    const rgb = paletteHslToRgb(color.h, color.s, color.l);
+    return paletteRgbToHex(rgb);
+}
+
+function paletteRelativeLuminance(r, g, b) {
+    const normalize = (value) => {
+        const channel = paletteClamp(value / 255, 0, 1);
+        return channel <= 0.03928
+            ? channel / 12.92
+            : Math.pow((channel + 0.055) / 1.055, 2.4);
+    };
+
+    const rLin = normalize(r);
+    const gLin = normalize(g);
+    const bLin = normalize(b);
+
+    return 0.2126 * rLin + 0.7152 * gLin + 0.0722 * bLin;
+}
+
+function palettePickContrastColor(color) {
+    const luminance = paletteRelativeLuminance(color.r, color.g, color.b);
+    return luminance > 0.45 ? "#1f2937" : "#f8fafc";
+}
+
+function paletteAdjustSaturation(base, factor, offset = 0) {
+    return paletteClamp(base * factor + offset, 0, 1);
+}
+
+function paletteAdjustLightness(base, offset, factor = 1) {
+    return paletteClamp(base * factor + offset, 0, 1);
+}
+
+function analyzeImageDataColors(imageData) {
+    const { data } = imageData;
+    const totalPixels = data.length / 4;
+    const step = Math.max(1, Math.floor(totalPixels / PALETTE_TARGET_SAMPLE_COUNT));
+
+    let totalR = 0;
+    let totalG = 0;
+    let totalB = 0;
+    let count = 0;
+
+    let accent = null;
+
+    for (let index = 0; index < data.length; index += step * 4) {
+        const alpha = data[index + 3];
+        if (alpha < 48) {
+            continue;
+        }
+
+        const r = data[index];
+        const g = data[index + 1];
+        const b = data[index + 2];
+
+        totalR += r;
+        totalG += g;
+        totalB += b;
+        count++;
+
+        const hsl = paletteRgbToHsl(r, g, b);
+        const vibrance = hsl.s;
+        const balance = 1 - Math.abs(hsl.l - 0.5);
+        const score = vibrance * 0.65 + balance * 0.35;
+
+        if (!accent || score > accent.score) {
+            accent = { color: hsl, score };
+        }
+    }
+
+    if (count === 0) {
+        throw new Error("No opaque pixels available for analysis");
+    }
+
+    const averageR = totalR / count;
+    const averageG = totalG / count;
+    const averageB = totalB / count;
+    const average = paletteRgbToHsl(averageR, averageG, averageB);
+
+    const accentColor = accent ? accent.color : average;
+
+    return {
+        average,
+        accent: accentColor,
+    };
+}
+
+function buildPaletteFromAccent(accent, average) {
+    const lightColors = [
+        paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.4, 0.08), l: paletteAdjustLightness(accent.l, 0.42, 0.52) }),
+        paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.52, 0.05), l: paletteAdjustLightness(accent.l, 0.26, 0.62) }),
+        paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.65), l: paletteAdjustLightness(accent.l, 0.12, 0.72) }),
+    ];
+
+    const darkColors = [
+        paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.55, 0.04), l: paletteAdjustLightness(accent.l, 0.14, 0.38) }),
+        paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.62, 0.02), l: paletteAdjustLightness(accent.l, 0.04, 0.3) }),
+        paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.72), l: paletteAdjustLightness(accent.l, -0.04, 0.22) }),
+    ];
+
+    const accentRgb = paletteHslToRgb(accent.h, accent.s, accent.l);
+
+    return {
+        source: "client",
+        baseColor: paletteHslToHex(accent),
+        averageColor: paletteHslToHex(average),
+        accentColor: paletteHslToHex(accent),
+        contrastColor: palettePickContrastColor(accentRgb),
+        gradients: {
+            light: {
+                colors: lightColors,
+                gradient: `linear-gradient(140deg, ${lightColors[0]} 0%, ${lightColors[1]} 45%, ${lightColors[2]} 100%)`,
+            },
+            dark: {
+                colors: darkColors,
+                gradient: `linear-gradient(135deg, ${darkColors[0]} 0%, ${darkColors[1]} 55%, ${darkColors[2]} 100%)`,
+            },
+        },
+        tokens: {
+            light: {
+                primaryColor: paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.6, 0.06), l: paletteAdjustLightness(accent.l, 0.22, 0.6) }),
+                primaryColorDark: paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.72, 0.02), l: paletteAdjustLightness(accent.l, 0.06, 0.52) }),
+            },
+            dark: {
+                primaryColor: paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.58, 0.04), l: paletteAdjustLightness(accent.l, 0.16, 0.42) }),
+                primaryColorDark: paletteHslToHex({ h: accent.h, s: paletteAdjustSaturation(accent.s, 0.68), l: paletteAdjustLightness(accent.l, 0.02, 0.32) }),
+            },
+        },
+    };
+}
+
+async function extractPaletteFromCanvas(imageUrl) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+            try {
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+                
+                const maxSide = Math.max(img.width, img.height);
+                const scale = PALETTE_MAX_DIMENSION / maxSide;
+                const w = Math.max(1, Math.round(img.width * scale));
+                const h = Math.max(1, Math.round(img.height * scale));
+                
+                canvas.width = w;
+                canvas.height = h;
+                ctx.drawImage(img, 0, 0, w, h);
+                
+                const imageData = ctx.getImageData(0, 0, w, h);
+                const analyzed = analyzeImageDataColors(imageData);
+                const palette = buildPaletteFromAccent(analyzed.accent, analyzed.average);
+                palette.source = imageUrl;
+                
+                resolve(palette);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        img.onerror = () => reject(new Error("Failed to load image for canvas analysis"));
+        img.src = imageUrl;
+    });
+}
+
 loadStoredPalettes();
 
 async function fetchPaletteData(imageUrl, signal) {
@@ -1879,11 +2208,14 @@ async function updateDynamicBackground(imageUrl) {
         paletteCache.delete(imageUrl);
         paletteCache.set(imageUrl, cached);
         queuePaletteApplication(cached, imageUrl);
+        debugLog("[本地缓存] 动态背景提取成功");
+        console.log(`[Palette CACHE] Loaded colors from local cache: ${imageUrl}`);
         return;
     }
 
     if (state.currentPaletteImage === imageUrl && state.dynamicPalette) {
         queuePaletteApplication(state.dynamicPalette, imageUrl);
+        debugLog("[内存复用] 动态背景提取成功");
         return;
     }
 
@@ -1901,14 +2233,40 @@ async function updateDynamicBackground(imageUrl) {
             return;
         }
         queuePaletteApplication(palette, imageUrl);
+        debugLog("[后端解析] 动态背景提取成功");
+        console.log(`[Palette BACKEND] Successfully extracted colors using Backend API: ${imageUrl}`);
     } catch (error) {
         if (error?.name === "AbortError") {
             return;
         }
-        console.warn("获取动态背景失败:", error);
-        debugLog(`动态背景加载失败: ${error}`);
-        if (requestId === paletteRequestId) {
-            resetDynamicBackground();
+
+        console.warn(`[Palette ERROR] Backend extraction failed:`, error);
+        debugLog("[后端解析] 失败，尝试前端降级");
+
+        try {
+            // 降级方案：使用客户端 Canvas 提取 (支持 PNG/WebP 且绕过服务器解码限制)
+            console.log(`[Palette FALLBACK] Attempting extraction using Frontend Canvas API...`);
+            const clientPalette = await extractPaletteFromCanvas(imageUrl);
+            if (requestId !== paletteRequestId) {
+                return;
+            }
+
+            // 提取成功后存入缓存，下次可直接使用
+            if (paletteCache.has(imageUrl)) {
+                paletteCache.delete(imageUrl);
+            }
+            paletteCache.set(imageUrl, clientPalette);
+            persistPaletteCache();
+
+            queuePaletteApplication(clientPalette, imageUrl);
+            debugLog("[前端降级] 动态背景提取成功");
+            console.log(`[Palette FRONTEND] Successfully extracted colors using Frontend Canvas API: ${imageUrl}`);
+        } catch (fallbackError) {
+            console.warn("客户端降级提取也失败了:", fallbackError);
+            debugLog(`[前端降级] 失败: 使用默认背景`);
+            if (requestId === paletteRequestId) {
+                resetDynamicBackground();
+            }
         }
     } finally {
         if (controller && paletteAbortController === controller) {
@@ -2380,6 +2738,20 @@ function seekAudio(value) {
     } else {
         state.lastSavedPlaybackTime = state.currentPlaybackTime;
         safeSetLocalStorage("currentPlaybackTime", state.currentPlaybackTime.toFixed(1));
+    }
+}
+
+async function performManualSync() {
+    const btn = document.getElementById("manualSyncBtn");
+    if (btn) btn.disabled = true;
+    showNotification("正在同步云端数据...");
+    try {
+        await syncDataToCloud();
+        showNotification("同步成功", "success");
+    } catch (e) {
+        showNotification("同步失败", "error");
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -3438,9 +3810,9 @@ function setupInteractions() {
         if (restoredSong) {
             state.currentSong = restoredSong;
             updatePlaylistHighlight();
-            updateCurrentSongInfo(restoredSong).catch(error => {
-                console.error("恢复歌曲信息失败:", error);
-            });
+            // 注意：不在这里调用 updateCurrentSongInfo，
+            // restoreCurrentSongState() 会通过 playSong → scheduleDeferredSongAssets
+            // 正确完成封面加载和动态背景应用，避免竞态条件重置 audioReadyForPalette
         }
 
         savePlayerState();
@@ -3676,6 +4048,7 @@ function createSearchResultItem(song, index) {
     item.className = "search-result-item";
     item.dataset.index = String(index);
 
+    // 选择圆圈 (替代封面位置)
     const selectionToggle = document.createElement("button");
     selectionToggle.className = "search-result-select";
     selectionToggle.type = "button";
@@ -3738,28 +4111,6 @@ function createSearchResultItem(song, index) {
         showQualityMenu(event, index, "search");
     });
 
-    const qualityMenu = document.createElement("div");
-    qualityMenu.className = "quality-menu";
-
-    const qualityOptions = [
-        { label: "标准音质", suffix: " (128k)", quality: "128" },
-        { label: "高音质", suffix: " (192k)", quality: "192" },
-        { label: "超高音质", suffix: " (320k)", quality: "320" },
-        { label: "无损音质", suffix: "", quality: "999" },
-    ];
-
-    qualityOptions.forEach(option => {
-        const qualityItem = document.createElement("div");
-        qualityItem.className = "quality-option";
-        qualityItem.textContent = `${option.label}${option.suffix}`;
-        qualityItem.addEventListener("click", (event) => {
-            downloadWithQuality(event, index, "search", option.quality);
-        });
-        qualityMenu.appendChild(qualityItem);
-    });
-
-    downloadButton.appendChild(qualityMenu);
-
     actions.appendChild(favoriteButton);
     actions.appendChild(playButton);
     actions.appendChild(downloadButton);
@@ -3771,10 +4122,7 @@ function createSearchResultItem(song, index) {
     applySelectionStateToElement(item, state.selectedSearchResults.has(index));
 
     item.addEventListener("click", (event) => {
-        if (event.target.closest(".search-result-actions")) {
-            return;
-        }
-        if (event.target.closest(".search-result-select")) {
+        if (event.target.closest(".search-result-actions") || event.target.closest(".search-result-select")) {
             return;
         }
         toggleSearchResultSelection(index);
@@ -4506,7 +4854,7 @@ function renderPlaylist() {
         return `
         <div class="playlist-item" data-index="${index}" role="button" tabindex="0" aria-label="播放 ${song.name}" data-favorite-key="${songKey}">
             ${song.name} - ${artistValue}
-            <button class="playlist-item-favorite action-btn favorite favorite-toggle" type="button" data-playlist-action="favorite" data-index="${index}" data-favorite-key="${songKey}" title="收藏" aria-label="收藏">
+            <button class="playlist-item-favorite favorite-toggle" type="button" data-playlist-action="favorite" data-index="${index}" data-favorite-key="${songKey}" title="收藏" aria-label="收藏">
                 <i class="fa-regular fa-heart"></i>
             </button>
             <button class="playlist-item-download" type="button" data-playlist-action="download" data-index="${index}" title="下载">
@@ -4943,6 +5291,29 @@ function clearFavorites() {
     if (state.currentList === "favorite") {
         state.currentList = "playlist";
         state.currentPlaylist = "playlist";
+        // 如果清空时正在播放收藏列表的歌，停止播放
+        dom.audioPlayer.pause();
+        dom.audioPlayer.src = "";
+        state.currentTrackIndex = -1;
+        state.currentSong = null;
+        state.currentAudioUrl = null;
+        state.currentPlaybackTime = 0;
+        state.lastSavedPlaybackTime = 0;
+        dom.progressBar.value = 0;
+        dom.progressBar.max = 0;
+        dom.currentTimeDisplay.textContent = "00:00";
+        dom.durationDisplay.textContent = "00:00";
+        updateProgressBarBackground(0, 1);
+        dom.currentSongTitle.textContent = "选择一首歌曲开始播放";
+        updateMobileToolbarTitle();
+        dom.currentSongArtist.textContent = "未知艺术家";
+        showAlbumCoverPlaceholder();
+        clearLyricsContent();
+        if (dom.lyrics) {
+            dom.lyrics.dataset.placeholder = "default";
+        }
+        dom.lyrics.classList.add("empty");
+        updatePlayPauseButton();
     }
     saveFavoriteState();
     savePlayerState();
@@ -5099,30 +5470,33 @@ function handleImportFavoritesChange(event) {
 function clearPlaylist() {
     if (state.playlistSongs.length === 0) return;
 
-    if (state.currentPlaylist === "playlist") {
-        dom.audioPlayer.pause();
-        dom.audioPlayer.src = "";
-        state.currentTrackIndex = -1;
-        state.currentSong = null;
-        state.currentAudioUrl = null;
-        state.currentPlaybackTime = 0;
-        state.lastSavedPlaybackTime = 0;
-        dom.progressBar.value = 0;
-        dom.progressBar.max = 0;
-        dom.currentTimeDisplay.textContent = "00:00";
-        dom.durationDisplay.textContent = "00:00";
-        updateProgressBarBackground(0, 1);
-        dom.currentSongTitle.textContent = "选择一首歌曲开始播放";
-        updateMobileToolbarTitle();
-        dom.currentSongArtist.textContent = "未知艺术家";
-        showAlbumCoverPlaceholder();
-        clearLyricsContent();
-        if (dom.lyrics) {
-            dom.lyrics.dataset.placeholder = "default";
-        }
-        dom.lyrics.classList.add("empty");
-        updatePlayPauseButton();
+    // 无论当前是从哪个列表播放，只要播放列表清空，
+    // 都需要重置播放器 UI 到空态
+    const wasPlayingFromPlaylist = state.currentPlaylist === "playlist";
+
+    dom.audioPlayer.pause();
+    dom.audioPlayer.src = "";
+    state.currentTrackIndex = -1;
+    state.currentSong = null;
+    state.currentAudioUrl = null;
+    state.currentPlaybackTime = 0;
+    state.lastSavedPlaybackTime = 0;
+    dom.progressBar.value = 0;
+    dom.progressBar.max = 0;
+    dom.currentTimeDisplay.textContent = "00:00";
+    dom.durationDisplay.textContent = "00:00";
+    updateProgressBarBackground(0, 1);
+    dom.currentSongTitle.textContent = "选择一首歌曲开始播放";
+    updateMobileToolbarTitle();
+    dom.currentSongArtist.textContent = "未知艺术家";
+    showAlbumCoverPlaceholder();
+    clearLyricsContent();
+    if (dom.lyrics) {
+        dom.lyrics.dataset.placeholder = "default";
     }
+    dom.lyrics.classList.add("empty");
+    updatePlayPauseButton();
+    updateFavoriteIcons();
 
     state.playlistSongs = [];
     dom.playlist.classList.add("empty");
@@ -5533,14 +5907,29 @@ async function playOnlineSong(index) {
     const song = state.onlineSongs[index];
     if (!song) return;
 
-    state.currentTrackIndex = index;
-    state.currentPlaylist = "online";
-    state.currentList = "playlist";
+    // 检查歌曲是否已在播放列表中
+    const existingIndex = state.playlistSongs.findIndex(s => getSongKey(s) === getSongKey(song));
+
+    if (existingIndex !== -1) {
+        state.currentTrackIndex = existingIndex;
+        state.currentPlaylist = "playlist";
+        state.currentList = "playlist";
+    } else {
+        state.playlistSongs.push(song);
+        state.currentTrackIndex = state.playlistSongs.length - 1;
+        state.currentPlaylist = "playlist";
+        state.currentList = "playlist";
+    }
 
     try {
         await playSong(song);
-        updateOnlineHighlight();
+        updatePlaylistHighlight();
         updatePlayModeUI();
+        renderPlaylist();
+        updatePlaylistActionStates();
+        
+        // 可选：如果希望继续高亮“探索雷达”中的项，保留对 updateOnlineHighlight 的调用
+        // updateOnlineHighlight();
     } catch (error) {
         console.error("播放失败:", error);
         showNotification("播放失败，请稍后重试", "error");
@@ -5577,11 +5966,12 @@ const EXPLORE_RADAR_GENRES = [
 ];
 
 function pickRandomExploreGenre() {
-    if (!Array.isArray(EXPLORE_RADAR_GENRES) || EXPLORE_RADAR_GENRES.length === 0) {
-        return "流行";
-    }
-    const index = Math.floor(Math.random() * EXPLORE_RADAR_GENRES.length);
-    return EXPLORE_RADAR_GENRES[index];
+    const genres = (state.radarSettings && state.radarSettings.genres && state.radarSettings.genres.length > 0)
+        ? state.radarSettings.genres
+        : EXPLORE_RADAR_GENRES;
+    
+    const index = Math.floor(Math.random() * genres.length);
+    return genres[index];
 }
 
 const EXPLORE_RADAR_SOURCES = ["netease", "kuwo"];
@@ -5972,3 +6362,141 @@ function showNotification(message, type = "success") {
         notification.classList.remove("show");
     }, 3000);
 }
+
+// --- 设置与探索雷达自定义 ---
+
+function initSettings() {
+    // 渲染风格列表
+    renderGenreList();
+
+    // 绑定 Logo 双击事件
+    if (dom.logo) {
+        dom.logo.addEventListener("dblclick", openSettingsModal);
+    }
+    
+    // 移动端双击标题或图标打开设置 (优化移动端双击兼容性)
+    let lastToolbarClick = 0;
+    const handleDoubleTap = (e) => {
+        const now = Date.now();
+        if (now - lastToolbarClick < 300) {
+            e.preventDefault();
+            openSettingsModal();
+        }
+        lastToolbarClick = now;
+    };
+
+    if (dom.mobileToolbarTitle) {
+        dom.mobileToolbarTitle.addEventListener("click", handleDoubleTap);
+    }
+
+    // 绑定按钮事件
+    if (dom.closeSettingsBtn) {
+        dom.closeSettingsBtn.addEventListener("click", closeSettingsModal);
+    }
+    if (dom.saveSettingsBtn) {
+        dom.saveSettingsBtn.addEventListener("click", saveSettings);
+    }
+    // 绑定齿轮图标按钮
+    const openBtn = dom.openSettingsBtn || document.getElementById("openSettingsBtn");
+    if (openBtn) {
+        openBtn.addEventListener("click", openSettingsModal);
+    }
+    if (dom.settingsModal) {
+        dom.settingsModal.addEventListener("click", (e) => {
+            if (e.target === dom.settingsModal) closeSettingsModal();
+        });
+    }
+
+    // 加载设置
+    loadSettings();
+}
+
+function renderGenreList() {
+    if (!dom.radarGenreList) return;
+    
+    dom.radarGenreList.innerHTML = EXPLORE_RADAR_GENRES.map(genre => `
+        <div class="genre-item">
+            <input type="checkbox" id="genre-${genre}" value="${genre}" checked>
+            <label for="genre-${genre}" class="genre-label">${genre}</label>
+        </div>
+    `).join("");
+}
+
+function openSettingsModal() {
+    if (dom.settingsModal) {
+        dom.settingsModal.classList.add("show");
+        dom.settingsModal.setAttribute("aria-hidden", "false");
+    }
+}
+
+function closeSettingsModal() {
+    if (dom.settingsModal) {
+        dom.settingsModal.classList.remove("show");
+        dom.settingsModal.setAttribute("aria-hidden", "true");
+    }
+}
+
+async function saveSettings() {
+    const selectedGenres = Array.from(dom.radarGenreList.querySelectorAll("input:checked")).map(cb => cb.value);
+    
+    if (selectedGenres.length === 0) {
+        showNotification("请至少选择一个风格", "warning");
+        return;
+    }
+
+    state.radarSettings = {
+        genres: selectedGenres
+    };
+
+    // 本地保存
+    safeSetLocalStorage("radarSettings", JSON.stringify(state.radarSettings));
+
+    // 云同步会自动被 STORAGE_KEYS_TO_SYNC 机制处理，但我们这里手动触发一次以确保即时性
+    if (typeof persistStorageItems === "function") {
+        persistStorageItems({
+            radarSettings: JSON.stringify(state.radarSettings)
+        });
+    }
+
+    showNotification("设置已保存", "success");
+    closeSettingsModal();
+}
+
+async function loadSettings() {
+    // 1. 从本地加载 (作为兜底)
+    let localSettings = safeGetLocalStorage("radarSettings");
+    if (localSettings) {
+        try {
+            state.radarSettings = JSON.parse(localSettings);
+            applySettingsToUI();
+        } catch (e) {
+            console.error("解析本地设置失败:", e);
+        }
+    }
+    // 注意：云端加载已在 bootstrapPersistentStorage 中统一处理
+}
+
+function applySettingsToUI() {
+    if (!state.radarSettings || !state.radarSettings.genres || !dom.radarGenreList) return;
+    
+    const checkboxes = dom.radarGenreList.querySelectorAll("input[type='checkbox']");
+    checkboxes.forEach(cb => {
+        cb.checked = state.radarSettings.genres.includes(cb.value);
+    });
+}
+
+// 在 bootstrapPersistentStorage 之后或期间初始化设置
+(function() {
+    const originalBootstrap = bootstrapPersistentStorage;
+    bootstrapPersistentStorage = async function() {
+        await originalBootstrap();
+        initSettings();
+    };
+})();
+
+// 如果页面没有启用云同步，也要初始化设置
+document.addEventListener("DOMContentLoaded", () => {
+    if (!remoteSyncEnabled) {
+        initSettings();
+    }
+});
