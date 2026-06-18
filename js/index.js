@@ -775,51 +775,51 @@ const savedCurrentPlaylist = (() => {
     return playlists.includes(stored) ? stored : "playlist";
 })();
 
-// API配置 - 修复API地址和请求方式
+// API配置 - 使用 JSONP 直接从浏览器请求上游 API，绕过 Workers IP 被 WAF 拦截的问题
 const API = {
     get baseUrl() {
-        return "/proxy";
+        return "https://music-api-hk.gdstudio.xyz/api.php";
     },
 
     generateSignature: () => {
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     },
 
-    fetchJson: async (url) => {
-        try {
-            const response = await fetch(url, {
-                headers: {
-                    "Accept": "application/json",
-                },
-                credentials: "same-origin",
-            });
+    fetchJson: (url) => {
+        return new Promise((resolve, reject) => {
+            const callbackName = 'jp_' + Math.random().toString(36).substring(2, 10);
+            const separator = url.includes('?') ? '&' : '?';
+            const jsonpUrl = `${url}${separator}callback=${callbackName}`;
 
-            if (!response.ok) {
-                throw new Error(`Request failed with status ${response.status}`);
-            }
+            const timeout = setTimeout(() => {
+                cleanup();
+                reject(new Error('JSONP 请求超时'));
+            }, 15000);
 
-            const cacheStatus = response.headers.get("X-Cache-Status");
-            if (cacheStatus) {
+            const cleanup = () => {
+                clearTimeout(timeout);
+                delete window[callbackName];
+                const el = document.getElementById(callbackName);
+                if (el) el.remove();
+            };
+
+            window[callbackName] = (data) => {
+                cleanup();
                 const urlObj = new URL(url, window.location.origin);
-                const type = urlObj.searchParams.get("types") || "未知接口";
-                if (cacheStatus === "HIT") {
-                    debugLog(`[边缘缓存] 命中接口数据: ${type}`);
-                } else if (cacheStatus === "MISS") {
-                    debugLog(`[穿透回源] 拉取接口数据: ${type}`);
-                }
-            }
+                const type = urlObj.searchParams.get("types") || "";
+                debugLog(`[直连API] ${type} 请求成功`);
+                resolve(data);
+            };
 
-            const text = await response.text();
-            try {
-                return JSON.parse(text);
-            } catch (parseError) {
-                console.warn("JSON parse failed, returning raw text", parseError);
-                return text;
-            }
-        } catch (error) {
-            console.error("API request error:", error);
-            throw error;
-        }
+            const script = document.createElement('script');
+            script.id = callbackName;
+            script.src = jsonpUrl;
+            script.onerror = () => {
+                cleanup();
+                reject(new Error('JSONP 请求失败'));
+            };
+            document.head.appendChild(script);
+        });
     },
 
     search: async (keyword, source = "netease", count = 20, page = 1) => {
