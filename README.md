@@ -1,8 +1,6 @@
-# Solara（光域）
+# Solara Hiyori Remix（基于光域按照自己喜好更改的个性化控制面板版本）
 
 > 基于 Cloudflare Pages 的现代化音乐播放器，整合多曲库搜索与播放。
-
-![Preview](Preview.gif)
 
 ## 特性
 
@@ -120,8 +118,9 @@ npm run deploy
 
 ## 致谢
 
+- [Akudamatata](https://github.com/akudamatata) 提供的Solara原版本
 - [GD音乐台](https://music.gdstudio.xyz) 提供的免费 API
-- Linux.do [牛就是牛@ufoo](https://linux.do/t/topic/942415) 提供的灵感
+- [牛就是牛@ufoo](https://linux.do/t/topic/942415) 提供的灵感
 
 ## 许可证
 
