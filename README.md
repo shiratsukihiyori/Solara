@@ -118,9 +118,9 @@ npm run deploy
 
 ## 致谢
 
-- [Akudamatata](https://github.com/akudamatata) 提供的Solara原版本
-- [GD音乐台](https://music.gdstudio.xyz) 提供的免费 API
-- [牛就是牛@ufoo](https://linux.do/t/topic/942415) 提供的灵感
+- [Akudamatata](https://github.com/akudamatata)提供的[Solara原版本](https://github.com/akudamatata/Solara)
+- [GD音乐台](https://music.gdstudio.xyz)提供的免费 API
+- [牛就是牛@ufoo](https://linux.do/t/topic/942415)提供的灵感
 
 ## 许可证
 
