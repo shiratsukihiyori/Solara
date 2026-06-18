@@ -5,6 +5,7 @@
         "酷我音乐": "Kuwo Music",
         "JOOX音乐": "JOOX Music",
         "哔哩哔哩": "Bilibili",
+        "Spotify": "Spotify",
         "极高音质": "High Quality",
         "标准音质": "Standard Quality",
         "高品音质": "High Quality",
@@ -48,12 +49,12 @@
         "聚合所有雷达，探索新音乐": "Aggregate radars, explore new music",
 
         // login.html
-        "登录 - Solara": "Login - Solara",
+        "登录 - Solara Hiyori Remix": "Login - Solara Hiyori Remix",
         "访问受到保护": "Access Protected",
         "访问口令": "Access Token",
         "请输入密码": "Enter password",
         "只有输入了正确口令的成员才能继续访问内容。": "Only members with the correct token can access the content.",
-        "进入 Solara": "Enter Solara",
+        "进入 Solara Hiyori Remix": "Enter Solara Hiyori Remix",
         "安全状态：受保护": "Security Status: Protected",
         "密码错误，请重试": "Incorrect password, please try again",
         "登录出错，请稍后再试": "Login error, please try again later",

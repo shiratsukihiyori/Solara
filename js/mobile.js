@@ -3,19 +3,19 @@
         return;
     }
 
-    const bridge = window.SolaraMobileBridge || {};
+    const bridge = window.SolaraHiyoriRemixMobileBridge || {};
     bridge.handlers = bridge.handlers || {};
     bridge.queue = Array.isArray(bridge.queue) ? bridge.queue : [];
-    window.SolaraMobileBridge = bridge;
+    window.SolaraHiyoriRemixMobileBridge = bridge;
 
-    const dom = window.SolaraDom || {};
+    const dom = window.SolaraHiyoriRemixDom || {};
     let initialized = false;
 
     function updateMobileToolbarTitleImpl() {
         if (!dom.mobileToolbarTitle) {
             return;
         }
-        dom.mobileToolbarTitle.textContent = "Solara";
+        dom.mobileToolbarTitle.textContent = "Solara Hiyori Remix";
     }
 
     function updateMobileOverlayScrim() {
@@ -80,7 +80,7 @@
     }
 
     function normalizePanelView(view) {
-        return view === "lyrics" ? "playlist" : (view || "playlist");
+        return view || "playlist";
     }
 
     function openMobilePanelImpl(view = "playlist") {

@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Solara！分支由白月日和提供无服务器部署！仅供学习使用！严禁使用于非法用途！</title>
-    <meta name="apple-mobile-web-app-title" content="Solara">
+    <title>Solara Hiyori Remix - 星光音乐</title>
+    <meta name="apple-mobile-web-app-title" content="Solara Hiyori Remix">
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
     <link rel="shortcut icon" href="/favicon.png">
@@ -110,7 +110,7 @@
             <button class="mobile-toolbar__button" id="mobileExploreButton" type="button" aria-label="探索雷达">
                 <i class="fas fa-satellite-dish" aria-hidden="true"></i>
             </button>
-            <div class="mobile-toolbar__title" id="mobileToolbarTitle">Solara</div>
+            <div class="mobile-toolbar__title" id="mobileToolbarTitle">Solara Hiyori Remix</div>
             <div class="mobile-toolbar__actions">
                 <button class="mobile-toolbar__button" id="mobileSearchToggle" type="button" aria-label="打开搜索">
                     <i class="fas fa-search" aria-hidden="true"></i>
@@ -118,8 +118,8 @@
             </div>
         </div>
         <div class="header">
-            <h1>Solara</h1>
-            <div class="warning">Made by Wet Dream Boy，免费API来自GD音乐台(music.gdstudio.xyz)，仅供学习交流使用，请支持正版音乐奥！</div>
+            <h1>Solara Hiyori Remix</h1>
+            <div class="warning">歌曲API来自GD音乐台(music.gdstudio.xyz)，仅供学习交流使用，请支持正版音乐！</div>
             <div class="header-left-controls">
                 <button id="themeToggleButton" class="theme-toggle-button" type="button" aria-label="切换深浅色模式">
                     <i class="fas fa-sun theme-icon theme-icon--sun" aria-hidden="true"></i>
@@ -242,6 +242,16 @@
                             data-target="favorites"
                         >
                             收藏列表
+                        </button>
+                        <button
+                            id="mobileLyricsTab"
+                            class="playlist-tab"
+                            type="button"
+                            role="tab"
+                            aria-selected="false"
+                            data-target="lyrics"
+                        >
+                            歌词
                         </button>
                     </div>
                     <div class="mobile-panel-actions">
@@ -465,24 +475,40 @@
             </div>
         </div>
 
+        <!-- 桌面端播放列表弹出层 -->
+        <div id="playlistPopup" class="playlist-popup" aria-hidden="true"></div>
+
         <div class="controls">
-            <div class="transport-controls">
-                <button class="play-mode-btn transport-button transport-button--mode" id="playModeBtn" type="button" title="播放模式">
-                    <i class="fas fa-repeat"></i>
-                </button>
-                <button class="transport-button transport-button--prev" onclick="playPrevious()" type="button" title="上一曲"><i class="fas fa-backward-step"></i></button>
-                <button class="transport-button transport-button--play" id="playPauseBtn" type="button" title="播放 / 暂停"><i class="fas fa-play"></i></button>
-                <button class="transport-button transport-button--next" onclick="playNext()" type="button" title="下一曲"><i class="fas fa-forward-step"></i></button>
-                <button class="transport-button transport-button--queue" id="mobileQueueToggle" type="button" title="打开播放列表" aria-label="打开播放列表"><i class="fas fa-bars"></i></button>
-                <button class="transport-button transport-button--shuffle" id="shuffleToggleBtn" type="button" title="随机播放" aria-label="切换随机播放"><i class="fas fa-shuffle shuffle-icon shuffle-icon--off"></i></button>
+            <div class="controls-progress">
+                <div class="controls-progress-fill" id="controlsProgressFill"></div>
+                <input type="range" id="progressBar" class="controls-progress-range" min="0" max="0" step="0.1" value="0" aria-label="歌曲进度">
             </div>
-            <div class="progress-container">
-                <span id="currentTimeDisplay">00:00</span>
-                <input type="range" id="progressBar" min="0" max="0" step="0.1" value="0">
-                <span id="durationDisplay">00:00</span>
-            </div>
-            <div class="control-trailing">
-                <div class="audio-tools">
+            <div class="controls-body">
+                <div class="now-playing-section">
+                    <img id="controlAlbumArt" class="now-playing__art" src="" alt="">
+                    <div class="now-playing__info">
+                        <div class="now-playing__title" id="nowPlayingTitle">未在播放</div>
+                        <div class="now-playing__artist" id="nowPlayingArtist">未知艺术家</div>
+                    </div>
+                </div>
+                <div class="playback-section">
+                    <div class="transport-controls">
+                        <button class="transport-button transport-button--shuffle" id="shuffleToggleBtn" type="button" title="随机播放" aria-label="切换随机播放"><i class="fas fa-shuffle shuffle-icon shuffle-icon--off"></i></button>
+                        <button class="transport-button transport-button--prev" onclick="playPrevious()" type="button" title="上一曲"><i class="fas fa-backward-step"></i></button>
+                        <button class="transport-button transport-button--play" id="playPauseBtn" type="button" title="播放 / 暂停"><i class="fas fa-play"></i></button>
+                        <button class="transport-button transport-button--next" onclick="playNext()" type="button" title="下一曲"><i class="fas fa-forward-step"></i></button>
+                        <button class="play-mode-btn transport-button transport-button--mode" id="playModeBtn" type="button" title="播放模式"><i class="fas fa-repeat"></i></button>
+                        <button class="transport-button transport-button--queue" id="mobileQueueToggle" type="button" title="打开播放列表" aria-label="打开播放列表"><i class="fas fa-bars"></i></button>
+                    </div>
+                    <div class="progress-details">
+                        <span id="currentTimeDisplay" class="progress-time">00:00</span>
+                        <span id="durationDisplay" class="progress-time">00:00</span>
+                    </div>
+                </div>
+                <div class="extra-controls">
+                    <button id="playlistToggleBtn" class="extra-controls-btn" type="button" title="播放列表" aria-label="播放列表">
+                        <i class="fas fa-list"></i>
+                    </button>
                     <div class="player-quality">
                         <button id="qualityToggle" class="player-quality-btn" type="button">
                             <span id="qualityLabel">极高音质</span>
@@ -493,11 +519,11 @@
                         <i id="volumeIcon" class="fas fa-volume-up"></i>
                         <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.8">
                     </div>
+                    <button id="loadOnlineBtn" title="聚合所有雷达，探索新音乐">
+                        <span class="btn-text"><i class="fas fa-satellite-dish"></i></span>
+                        <span class="loader" style="display: none;"></span>
+                    </button>
                 </div>
-                <button id="loadOnlineBtn" title="聚合所有雷达，探索新音乐">
-                    <span class="btn-text"><i class="fas fa-satellite-dish"></i> 探索雷达</span>
-                    <span class="loader" style="display: none;"></span>
-                </button>
             </div>
         </div>
     </div>

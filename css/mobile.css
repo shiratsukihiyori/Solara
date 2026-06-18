@@ -77,7 +77,10 @@ body.mobile-view .background-stage {
 body.mobile-view .container {
     width: 100%;
     max-width: 420px;
-    background: linear-gradient(180deg, rgba(27, 29, 36, 0.92), rgba(7, 9, 14, 0.95));
+    background: rgba(20, 22, 30, 0.65);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 32px;
     padding: clamp(16px, 5vw, 28px);
     padding-top: calc(env(safe-area-inset-top) + clamp(18px, 6vw, 32px));
@@ -212,6 +215,8 @@ body.mobile-view .album-cover {
     top: 50%;
     left: 50%;
     width: 58%;
+    height: unset;
+    min-height: unset;
     aspect-ratio: 1 / 1;
     transform: translate(-50%, -50%);
     border-radius: 50%;
@@ -409,53 +414,56 @@ body.mobile-view .controls {
     gap: clamp(16px, 5vw, 24px);
     align-items: stretch;
     margin-top: auto;
-    grid-template-columns: unset;
-    grid-template-areas: unset;
+}
+
+body.mobile-view .controls-progress {
+    display: block;
+    order: 0;
+    height: 4px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 2px;
+    margin-bottom: 8px;
+}
+
+body.mobile-view .controls-progress-fill {
+    background: linear-gradient(90deg, rgba(243,162,91,0.95), rgba(243,109,109,0.95));
+    border-radius: 2px;
+}
+
+body.mobile-view .now-playing-section,
+body.mobile-view .extra-controls {
+    display: none;
+}
+
+body.mobile-view .controls-body {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    gap: clamp(16px, 5vw, 24px);
+    align-items: stretch;
+    min-height: 0;
+}
+
+body.mobile-view .playback-section {
+    max-width: none;
+    gap: 8px;
 }
 
 body.mobile-view #loadOnlineBtn {
     display: none;
 }
 
-body.mobile-view .progress-container {
-    grid-area: unset;
+body.mobile-view .progress-details {
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+    gap: 10px;
     order: 1;
-    width: 100%;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    row-gap: 8px;
-    column-gap: 10px;
-    align-items: center;
 }
 
-body.mobile-view .progress-container input[type="range"] {
-    grid-column: 1 / span 3;
-    grid-row: 1;
-    width: 100%;
-    height: 4px;
-    border-radius: 999px;
-    background: linear-gradient(to right,
-        rgba(243, 162, 91, 0.95) 0%,
-        rgba(243, 162, 91, 0.95) var(--progress, 0%),
-        rgba(255, 255, 255, 0.15) var(--progress, 0%),
-        rgba(255, 255, 255, 0.15) 100%);
-}
-
-body.mobile-view .progress-container span {
+body.mobile-view .progress-time {
     font-size: 0.8rem;
     color: rgba(255, 255, 255, 0.6);
-}
-
-body.mobile-view .progress-container span:first-of-type {
-    grid-column: 1;
-    grid-row: 2;
-    justify-self: start;
-}
-
-body.mobile-view .progress-container span:last-of-type {
-    grid-column: 3;
-    grid-row: 2;
-    justify-self: end;
 }
 
 body.mobile-view .transport-controls {
@@ -569,6 +577,7 @@ body.mobile-view .mobile-panel {
     width: min(100%, 420px);
     background: rgba(13, 16, 24, 0.96);
     backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
     border-radius: 28px 28px 0 0;
     padding: 18px clamp(18px, 6vw, 28px) calc(env(safe-area-inset-bottom) + clamp(22px, 7vw, 32px));
     display: flex;
@@ -955,6 +964,7 @@ body.mobile-view .search-results {
     margin-top: 0;
     position: relative;
     scrollbar-width: none;
+    background: rgba(8, 10, 16, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 20px;
 }

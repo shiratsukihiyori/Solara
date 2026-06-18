@@ -4,6 +4,7 @@ html.desktop-view .mobile-toolbar,
 html.desktop-view .mobile-panel-header,
 html.desktop-view .mobile-overlay-scrim,
 html.desktop-view .mobile-quality-chip,
+html.desktop-view .progress-container,
 html.desktop-view .mobile-close-btn,
 html.desktop-view .mobile-turntable__tonearm,
 html.desktop-view .mobile-turntable__label,
@@ -102,4 +103,146 @@ html.desktop-view .search-results-list {
 
 html.desktop-view .search-results {
     gap: 0;
+}
+
+/* ===== Desktop: Single-column grid (cover & playlist hidden) ===== */
+html.desktop-view .container {
+    grid-template-areas:
+        "header"
+        "search"
+        "lyrics"
+        "controls";
+    grid-template-columns: 1fr;
+}
+
+html.desktop-view .cover-area {
+    display: none !important;
+}
+
+/* ===== Desktop: Playlist Popup ===== */
+html.desktop-view #playlistPopup {
+    position: fixed;
+    bottom: 80px;
+    right: 20px;
+    width: 380px;
+    max-height: 55vh;
+    background: var(--container-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    z-index: 9999;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 16px;
+}
+
+html.desktop-view #playlistPopup.show {
+    display: flex;
+}
+
+/* Strip outer styling from playlist containers inside the popup */
+html.desktop-view #playlistPopup .playlist,
+html.desktop-view #playlistPopup .favorites {
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    height: auto;
+    max-height: none;
+    min-width: 0;
+    max-width: none;
+    position: static;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    grid-area: unset;
+    align-items: unset;
+    justify-content: unset;
+    margin: 0;
+    box-shadow: none;
+}
+
+html.desktop-view #playlistPopup .playlist-header {
+    position: static;
+    padding: 0 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    pointer-events: auto;
+}
+
+html.desktop-view #playlistPopup .playlist-tabs {
+    display: flex;
+    gap: 6px;
+}
+
+html.desktop-view #playlistPopup .playlist-tab {
+    padding: 6px 14px;
+    font-size: 13px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: transparent;
+    color: var(--text-secondary-color);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+html.desktop-view #playlistPopup .playlist-tab.active {
+    background: var(--primary-color);
+    color: #fff;
+    border-color: var(--primary-color);
+}
+
+html.desktop-view #playlistPopup .playlist-actions-tray {
+    display: flex;
+    gap: 4px;
+}
+
+html.desktop-view #playlistPopup .playlist-action-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary-color);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease, background 0.2s ease;
+}
+
+html.desktop-view #playlistPopup .playlist-action-btn:hover {
+    color: var(--text-color);
+    background: var(--item-hover-bg);
+}
+
+html.desktop-view #playlistPopup .playlist-scroll {
+    flex: 1;
+    overflow-y: auto;
+    margin: 0 -16px;
+    padding: 0 16px;
+}
+
+html.desktop-view #playlistPopup .playlist-items .playlist-item {
+    padding: 8px 12px;
+    padding-right: 100px;
+    font-size: 13px;
+}
+
+html.desktop-view #playlistPopup .empty-message {
+    text-align: center;
+    color: var(--text-secondary-color);
+    padding: 40px 0;
+    font-size: 14px;
+}
+
+/* ===== Extra Controls Toggle Button Active ===== */
+html.desktop-view #playlistToggleBtn.active {
+    color: var(--primary-color);
 }

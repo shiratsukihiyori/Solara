@@ -29,6 +29,9 @@ const dom = {
     albumCover: document.getElementById("albumCover"),
     currentSongTitle: document.getElementById("currentSongTitle"),
     currentSongArtist: document.getElementById("currentSongArtist"),
+    controlAlbumArt: document.getElementById("controlAlbumArt"),
+    nowPlayingTitle: document.getElementById("nowPlayingTitle"),
+    nowPlayingArtist: document.getElementById("nowPlayingArtist"),
     debugInfo: document.getElementById("debugInfo"),
     importSelectedBtn: document.getElementById("importSelectedBtn"),
     importSelectedCount: document.getElementById("importSelectedCount"),
@@ -85,14 +88,14 @@ const dom = {
     logo: document.querySelector(".header h1"),
 };
 
-window.SolaraDom = dom;
+window.SolaraHiyoriRemixDom = dom;
 
 const isMobileView = Boolean(window.__SOLARA_IS_MOBILE);
 
-const mobileBridge = window.SolaraMobileBridge || {};
+const mobileBridge = window.SolaraHiyoriRemixMobileBridge || {};
 mobileBridge.handlers = mobileBridge.handlers || {};
 mobileBridge.queue = Array.isArray(mobileBridge.queue) ? mobileBridge.queue : [];
-window.SolaraMobileBridge = mobileBridge;
+window.SolaraHiyoriRemixMobileBridge = mobileBridge;
 
 function invokeMobileHook(name, ...args) {
     if (!isMobileView) {
@@ -165,26 +168,27 @@ function updateMobileClearPlaylistVisibility() {
     button.setAttribute("aria-hidden", shouldShow ? "false" : "true");
 }
 
-function updateMobileLibraryActionVisibility(showFavorites) {
+function updateMobileLibraryActionVisibility(target) {
     if (!isMobileView) {
         return;
     }
+    const showPlaylist = target === "playlist";
+    const showFavorites = target === "favorites";
     const playlistGroup = dom.mobilePlaylistActions;
     const favoritesGroup = dom.mobileFavoritesActions;
-    const showFavoritesGroup = Boolean(showFavorites);
 
     if (playlistGroup) {
-        if (showFavoritesGroup) {
-            playlistGroup.setAttribute("hidden", "");
-            playlistGroup.setAttribute("aria-hidden", "true");
-        } else {
+        if (showPlaylist) {
             playlistGroup.removeAttribute("hidden");
             playlistGroup.setAttribute("aria-hidden", "false");
+        } else {
+            playlistGroup.setAttribute("hidden", "");
+            playlistGroup.setAttribute("aria-hidden", "true");
         }
     }
 
     if (favoritesGroup) {
-        if (showFavoritesGroup) {
+        if (showFavorites) {
             favoritesGroup.removeAttribute("hidden");
             favoritesGroup.setAttribute("aria-hidden", "false");
         } else {
@@ -651,7 +655,8 @@ const SOURCE_OPTIONS = [
     { value: "netease", label: "网易云音乐" },
     { value: "kuwo", label: "酷我音乐" },
     { value: "joox", label: "JOOX音乐" },
-    { value: "bilibili", label: "哔哩哔哩" }
+    { value: "bilibili", label: "哔哩哔哩" },
+    { value: "spotify", label: "Spotify" }
 ];
 
 function normalizeSource(value) {
@@ -989,6 +994,9 @@ function validateStateConsistency() {
         // 更新 UI (如果 DOM 已加载)
         if (dom.currentSongTitle) dom.currentSongTitle.textContent = "选择一首歌曲开始播放";
         if (dom.currentSongArtist) dom.currentSongArtist.textContent = "未知艺术家";
+        if (dom.nowPlayingTitle) dom.nowPlayingTitle.textContent = "未在播放";
+        if (dom.nowPlayingArtist) dom.nowPlayingArtist.textContent = "未知艺术家";
+        if (dom.controlAlbumArt) dom.controlAlbumArt.src = "";
         if (typeof showAlbumCoverPlaceholder === "function") showAlbumCoverPlaceholder();
         if (typeof updateMobileToolbarTitle === "function") updateMobileToolbarTitle();
         if (typeof updatePlayPauseButton === "function") updatePlayPauseButton();
@@ -1223,7 +1231,7 @@ bootstrapPersistentStorage();
 
     let handlersBound = false;
     let lastPositionUpdateTime = 0;
-    const MEDIA_SESSION_ENDED_FLAG = '__solaraMediaSessionHandledEnded';
+    const MEDIA_SESSION_ENDED_FLAG = '__solaraHiyoriRemixMediaSessionHandledEnded';
 
     const preferLockScreenTrackControls = (() => {
         if (typeof navigator === 'undefined') {
@@ -1300,7 +1308,7 @@ bootstrapPersistentStorage();
     function updateMediaMetadata() {
         // 依赖现有全局 state.currentSong；已在项目中使用 localStorage 保存/恢复。:contentReference[oaicite:7]{index=7}
         const song = state.currentSong || {};
-        const title = song.name || dom.currentSongTitle?.textContent || 'Solara';
+        const title = song.name || dom.currentSongTitle?.textContent || 'Solara Hiyori Remix';
         const artist = song.artist || dom.currentSongArtist?.textContent || '';
         const artworkUrl = state.currentArtworkUrl || '';
 
@@ -1713,6 +1721,29 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
     });
 }
 
+function refreshBackground() {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+        const url = "url('" + img.src.replace(/'/g, "\\'") + "')";
+        const prevBg = document.documentElement.style.getPropertyValue("--bg-image") ||
+                       document.documentElement.style.getPropertyValue("--bg-gradient") ||
+                       "none";
+        if (prevBg === url) return;
+        setGlobalThemeProperty("--bg-image-next", url);
+        window.clearTimeout(backgroundTransitionTimer);
+        requestAnimationFrame(() => {
+            document.body.classList.add("background-transitioning");
+            backgroundTransitionTimer = window.setTimeout(() => {
+                setGlobalThemeProperty("--bg-image", url);
+                setGlobalThemeProperty("--bg-image-next", url);
+                document.body.classList.remove("background-transitioning");
+            }, 850);
+        });
+    };
+    img.src = "https://www.loliapi.com/acg?_=" + Date.now();
+}
+
 function applyDynamicGradient(options = {}) {
     if (!state.themeDefaultsCaptured) {
         captureThemeDefaults();
@@ -1890,6 +1921,7 @@ function attemptPaletteApplication() {
 function showAlbumCoverPlaceholder() {
     dom.albumCover.innerHTML = PLACEHOLDER_HTML;
     dom.albumCover.classList.remove("loading");
+    if (dom.controlAlbumArt) dom.controlAlbumArt.src = "";
     state.currentArtworkUrl = toAbsoluteUrl('/favicon.png');
     queueDefaultPalette();
     if (typeof window.__SOLARA_UPDATE_MEDIA_METADATA === 'function') {
@@ -1901,6 +1933,7 @@ function setAlbumCoverImage(url) {
     const safeUrl = toAbsoluteUrl(preferHttpsUrl(url));
     state.currentArtworkUrl = safeUrl;
     dom.albumCover.innerHTML = `<img src="${safeUrl}" alt="专辑封面">`;
+    if (dom.controlAlbumArt) dom.controlAlbumArt.src = safeUrl;
     dom.albumCover.classList.remove("loading");
     if (typeof window.__SOLARA_UPDATE_MEDIA_METADATA === 'function') {
         window.__SOLARA_UPDATE_MEDIA_METADATA();
@@ -2616,7 +2649,8 @@ function updateProgressBarBackground(value = Number(dom.progressBar.value), max 
     const duration = Number.isFinite(max) && max > 0 ? max : 0;
     const progressValue = Number.isFinite(value) ? Math.max(value, 0) : 0;
     const percent = duration > 0 ? Math.min(progressValue / duration, 1) * 100 : 0;
-    dom.progressBar.style.setProperty("--progress", `${percent}%`);
+    const fill = document.getElementById("controlsProgressFill");
+    if (fill) fill.style.width = `${percent}%`;
 }
 
 function updateVolumeSliderBackground(volume = dom.audioPlayer.volume) {
@@ -3238,7 +3272,7 @@ if (!("mediaSession" in navigator)) {
 
 function setupInteractions() {
     function ensureQualityMenuPortal() {
-        if (!dom.playerQualityMenu || !document.body || !isMobileView) {
+        if (!dom.playerQualityMenu || !document.body) {
             return;
         }
         const currentParent = dom.playerQualityMenu.parentElement;
@@ -3604,7 +3638,9 @@ function setupInteractions() {
                 return;
             }
             tab.addEventListener("click", () => {
-                const target = tab.dataset.target === "favorites" ? "favorites" : "playlist";
+                const target = tab.dataset.target === "favorites" || tab.dataset.target === "lyrics"
+                    ? tab.dataset.target
+                    : "playlist";
                 switchLibraryTab(target);
             });
         });
@@ -3826,11 +3862,44 @@ function setupInteractions() {
 
     if (state.currentSong) {
         restoreCurrentSongState();
+    } else {
+        refreshBackground();
     }
 
     if (isMobileView) {
         initializeMobileUI();
         updateMobileClearPlaylistVisibility();
+    }
+
+    /* ===== Desktop: Move playlist to popup + toggle ===== */
+    if (!isMobileView) {
+        const popup = document.getElementById("playlistPopup");
+        const toggleBtn = document.getElementById("playlistToggleBtn");
+        if (popup && toggleBtn) {
+            if (dom.playlist && dom.playlist.parentNode) {
+                popup.appendChild(dom.playlist);
+            }
+            if (dom.favorites && dom.favorites.parentNode) {
+                popup.appendChild(dom.favorites);
+            }
+
+            toggleBtn.addEventListener("click", () => {
+                const isOpen = popup.classList.contains("show");
+                popup.classList.toggle("show");
+                toggleBtn.classList.toggle("active");
+                popup.setAttribute("aria-hidden", isOpen ? "true" : "false");
+            });
+
+            document.addEventListener("click", (e) => {
+                if (popup.classList.contains("show") &&
+                    !popup.contains(e.target) &&
+                    !toggleBtn.contains(e.target)) {
+                    popup.classList.remove("show");
+                    toggleBtn.classList.remove("active");
+                    popup.setAttribute("aria-hidden", "true");
+                }
+            });
+        }
     }
 }
 
@@ -3839,12 +3908,14 @@ function updateCurrentSongInfo(song, options = {}) {
     const { loadArtwork = true } = options;
     state.currentSong = song;
     dom.currentSongTitle.textContent = song.name;
+    if (dom.nowPlayingTitle) dom.nowPlayingTitle.textContent = song.name;
     updateMobileToolbarTitle();
     updateFavoriteIcons();
 
     // 修复艺人名称显示问题 - 使用正确的字段名
     const artistText = Array.isArray(song.artist) ? song.artist.join(', ') : (song.artist || '未知艺术家');
     dom.currentSongArtist.textContent = artistText;
+    if (dom.nowPlayingArtist) dom.nowPlayingArtist.textContent = artistText;
 
     cancelDeferredPaletteUpdate();
 
@@ -4434,12 +4505,19 @@ function showQualityMenu(event, index, type) {
     const button = event.target.closest("button");
     const rect = button.getBoundingClientRect();
     menu.style.position = "fixed";
-    menu.style.top = (rect.bottom + 5) + "px";
     menu.style.left = (rect.left - 50) + "px";
-    menu.style.zIndex = "10000";
+    menu.style.zIndex = "2147483647";
 
-    // 添加到body
+    // 添加到body后测量高度，再决定向上还是向下展开
     document.body.appendChild(menu);
+    const menuHeight = menu.offsetHeight;
+    const spaceBelow = window.innerHeight - rect.bottom - 5;
+    const spaceAbove = rect.top - 5;
+    if (menuHeight > spaceBelow && spaceAbove > spaceBelow) {
+        menu.style.top = (rect.top - 5 - menuHeight) + "px";
+    } else {
+        menu.style.top = (rect.bottom + 5) + "px";
+    }
 
     // 点击其他地方关闭菜单
     setTimeout(() => {
@@ -4707,7 +4785,7 @@ function exportPlaylist() {
     try {
         const payload = {
             meta: {
-                app: "Solara",
+                app: "Solara Hiyori Remix",
                 version: PLAYLIST_EXPORT_VERSION,
                 exportedAt: new Date().toISOString(),
                 itemCount: state.playlistSongs.length
@@ -4721,7 +4799,7 @@ function exportPlaylist() {
         const formattedTimestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `solara-playlist-${formattedTimestamp}.json`;
+        anchor.download = `solara-hiyori-remix-playlist-${formattedTimestamp}.json`;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -4941,42 +5019,46 @@ function updateFavoriteIcons() {
 }
 
 function switchLibraryTab(target) {
-    const showFavorites = target === "favorites";
-
     if (Array.isArray(dom.libraryTabs) && dom.libraryTabs.length > 0) {
         dom.libraryTabs.forEach((tab) => {
-            if (!(tab instanceof HTMLElement)) {
-                return;
-            }
-            const target = tab.dataset.target === "favorites" ? "favorites" : "playlist";
-            const isActive = showFavorites ? target === "favorites" : target === "playlist";
+            if (!(tab instanceof HTMLElement)) return;
+            const tabTarget = tab.dataset.target;
+            const isActive = tabTarget === target;
             tab.classList.toggle("active", isActive);
             tab.setAttribute("aria-selected", isActive ? "true" : "false");
         });
     }
 
+    const showPlaylist = target === "playlist";
+    const showFavorites = target === "favorites";
+    const showLyrics = target === "lyrics";
+
     if (dom.playlist) {
-        if (showFavorites) {
-            dom.playlist.classList.remove("active");
-            dom.playlist.setAttribute("hidden", "");
-        } else {
-            dom.playlist.classList.add("active");
-            dom.playlist.removeAttribute("hidden");
-        }
+        dom.playlist.classList.toggle("active", showPlaylist);
+        dom.playlist.toggleAttribute("hidden", !showPlaylist);
     }
 
     if (dom.favorites) {
-        if (showFavorites) {
-            dom.favorites.classList.add("active");
-            dom.favorites.removeAttribute("hidden");
-        } else {
-            dom.favorites.classList.remove("active");
-            dom.favorites.setAttribute("hidden", "");
-        }
+        dom.favorites.classList.toggle("active", showFavorites);
+        dom.favorites.toggleAttribute("hidden", !showFavorites);
     }
 
-    updateMobileLibraryActionVisibility(showFavorites);
-    updateMobileClearPlaylistVisibility();
+    if (dom.lyrics) {
+        dom.lyrics.classList.toggle("active", showLyrics);
+        dom.lyrics.toggleAttribute("hidden", !showLyrics);
+    }
+
+    if (isMobileView && document.body) {
+        document.body.setAttribute("data-mobile-panel-view", target);
+        updateMobileLibraryActionVisibility(target);
+        updateMobileClearPlaylistVisibility();
+        if (showLyrics && dom.lyricsContent) {
+            const current = dom.lyricsContent.querySelector(".current");
+            if (current) {
+                scrollToCurrentLyric(current, dom.lyricsScroll || dom.lyrics);
+            }
+        }
+    }
     closeImportSelectedMenu();
 }
 
@@ -5003,6 +5085,9 @@ function removeFromPlaylist(index) {
             dom.currentSongTitle.textContent = "选择一首歌曲开始播放";
             updateMobileToolbarTitle();
             dom.currentSongArtist.textContent = "未知艺术家";
+            if (dom.nowPlayingTitle) dom.nowPlayingTitle.textContent = "未在播放";
+            if (dom.nowPlayingArtist) dom.nowPlayingArtist.textContent = "未知艺术家";
+            if (dom.controlAlbumArt) dom.controlAlbumArt.src = "";
             showAlbumCoverPlaceholder();
             clearLyricsContent();
             if (dom.lyrics) {
@@ -5334,7 +5419,7 @@ function exportFavorites() {
     try {
         const payload = {
             meta: {
-                app: "Solara",
+                app: "Solara Hiyori Remix",
                 version: FAVORITE_EXPORT_VERSION,
                 exportedAt: new Date().toISOString(),
                 itemCount: favorites.length,
@@ -5349,7 +5434,7 @@ function exportFavorites() {
         const formattedTimestamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}${String(now.getSeconds()).padStart(2, "0")}`;
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = `solara-favorites-${formattedTimestamp}.json`;
+        anchor.download = `solara-hiyori-remix-favorites-${formattedTimestamp}.json`;
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
@@ -5580,6 +5665,8 @@ async function playSong(song, options = {}) {
     state.pendingPaletteImmediate = false;
     state.pendingPaletteReady = false;
 
+    refreshBackground();
+
     try {
         updateCurrentSongInfo(song, { loadArtwork: false });
 
@@ -5758,8 +5845,8 @@ function scheduleDeferredSongAssets(song, playPromise) {
 
 // 修复：自动播放下一首 - 支持播放模式
 function autoPlayNext() {
-    if (dom.audioPlayer && dom.audioPlayer.__solaraMediaSessionHandledEnded === 'skip') {
-        dom.audioPlayer.__solaraMediaSessionHandledEnded = false;
+    if (dom.audioPlayer && dom.audioPlayer.__solaraHiyoriRemixMediaSessionHandledEnded === 'skip') {
+        dom.audioPlayer.__solaraHiyoriRemixMediaSessionHandledEnded = false;
         return;
     }
     const mode = getActivePlayMode();
