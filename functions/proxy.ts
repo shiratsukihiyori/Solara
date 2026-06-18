@@ -1,5 +1,6 @@
-const API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
+const API_BASE_URL = "http://music-api.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
 
 function createCorsHeaders(init?: Headers): Headers {
@@ -60,7 +61,7 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
   const init: RequestInit = {
     method: request.method,
     headers: {
-      "User-Agent": request.headers.get("User-Agent") ?? "Mozilla/5.0",
+      "User-Agent": BROWSER_UA,
       "Referer": "https://www.kuwo.cn/",
     },
   };
@@ -115,7 +116,7 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
 
   const apiUrl = new URL(API_BASE_URL);
   url.searchParams.forEach((value, key) => {
-    if (key === "target" || key === "callback" || key === "s") {
+    if (key === "target" || key === "callback") {
       return;
     }
     apiUrl.searchParams.set(key, value);
@@ -127,8 +128,8 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
 
   const upstream = await fetch(apiUrl.toString(), {
     headers: {
-      "User-Agent": request.headers.get("User-Agent") ?? "Mozilla/5.0",
-      "Accept": "application/json",
+        "User-Agent": BROWSER_UA,
+        "Accept": "application/json",
     },
   });
 
