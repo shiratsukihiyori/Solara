@@ -85,7 +85,7 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
 }
 
 async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise: Promise<any>) => void): Promise<Response> {
-  const cache = caches.default;
+  const cache = typeof caches !== "undefined" ? caches.default : null;
   
   // 构建缓存 Key（完整 URL 和原始方法，但过滤掉每次随机的防缓存签名 s）
   const cacheUrl = new URL(url.toString());
@@ -97,7 +97,7 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
   });
 
   // 如果是 GET 请求，尝试命中缓存
-  if (request.method === "GET") {
+  if (request.method === "GET" && cache) {
     try {
       const cachedResponse = await cache.match(cacheKey);
       if (cachedResponse) {
@@ -126,12 +126,23 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
     return new Response("Missing types", { status: 400 });
   }
 
-  const upstream = await fetch(apiUrl.toString(), {
-    headers: {
-        "User-Agent": BROWSER_UA,
-        "Accept": "application/json",
-    },
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(apiUrl.toString(), {
+      headers: {
+          "User-Agent": BROWSER_UA,
+          "Accept": "application/json",
+      },
+    });
+  } catch (error) {
+    console.error(`[Upstream Fetch Error] ${apiUrl.toString()}`, error);
+    const errHeaders = createCorsHeaders();
+    errHeaders.set("Content-Type", "application/json; charset=utf-8");
+    return new Response(JSON.stringify({ error: "Upstream API unreachable" }), {
+      status: 502,
+      headers: errHeaders,
+    });
+  }
 
   const responseText = await upstream.text();
   const headers = createCorsHeaders(upstream.headers);
@@ -167,9 +178,13 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
   });
 
   // 写入缓存（不阻塞主流程）
-  if (shouldCache && waitUntil) {
-    waitUntil(cache.put(cacheKey, response.clone()));
-    console.log(`[Cache PUT] Saved to cache: ${url.toString()}`);
+  if (shouldCache && waitUntil && cache) {
+    try {
+      waitUntil(cache.put(cacheKey, response.clone()));
+      console.log(`[Cache PUT] Saved to cache: ${url.toString()}`);
+    } catch (err) {
+      console.warn(`[Cache PUT Error] ${url.toString()}`, err);
+    }
   }
 
   return response;
