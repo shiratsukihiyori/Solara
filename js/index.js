@@ -785,7 +785,7 @@ const API = {
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     },
 
-    fetchJson: (url) => {
+    _fetchJsonp: (url) => {
         return new Promise((resolve, reject) => {
             const callbackName = 'jp_' + Math.random().toString(36).substring(2, 10);
             const separator = url.includes('?') ? '&' : '?';
@@ -820,6 +820,35 @@ const API = {
             };
             document.head.appendChild(script);
         });
+    },
+
+    _fetchProxy: async (url) => {
+        try {
+            const response = await fetch(url, {
+                headers: { "Accept": "application/json" },
+                credentials: "same-origin",
+            });
+            if (!response.ok) throw new Error(`Proxy ${response.status}`);
+            const text = await response.text();
+            return JSON.parse(text);
+        } catch (error) {
+            throw new Error(`代理请求失败: ${error.message}`);
+        }
+    },
+
+    fetchJson: async (url) => {
+        try {
+            return await API._fetchJsonp(url);
+        } catch (jsonpError) {
+            debugLog(`[API] 直连失败，降级到代理: ${jsonpError.message}`);
+            const qsIndex = url.indexOf('?');
+            const proxyUrl = qsIndex >= 0 ? `/proxy${url.substring(qsIndex)}` : '/proxy';
+            try {
+                return await API._fetchProxy(proxyUrl);
+            } catch (proxyError) {
+                throw new Error(`直连和代理均失败: ${proxyError.message}`);
+            }
+        }
     },
 
     search: async (keyword, source = "netease", count = 20, page = 1) => {
