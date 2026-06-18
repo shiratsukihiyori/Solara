@@ -1,0 +1,14 @@
+{
+  "name": "solara-hiyori-remix",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Solara Hiyori Remix - Cloudflare Pages Music Player",
+  "scripts": {
+    "dev": "wrangler pages dev . --d1 DB --persist-to=./data",
+    "deploy": "wrangler pages deploy ."
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241201.0",
+    "wrangler": "^3.100.0"
+  }
+}

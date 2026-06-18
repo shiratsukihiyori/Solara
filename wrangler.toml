@@ -1,0 +1,10 @@
+name = "solara-hiyori-remix"
+compatibility_date = "2024-12-01"
+pages_build_output_dir = "."
+
+# D1 数据库绑定（需在 Cloudflare Dashboard 中创建数据库）
+# 本地开发时可用 --d1 DB 替代，或在 dashboard 中配置 binding name 为 DB
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "solara-db"
+# database_id = "your-database-id"

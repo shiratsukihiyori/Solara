@@ -392,7 +392,7 @@ function createPersistentStorageClient() {
             try {
                 const url = new URL(REMOTE_STORAGE_ENDPOINT, window.location.origin);
                 url.searchParams.set("status", "1");
-                const response = await fetch(url.toString(), { method: "GET" });
+                const response = await fetch(url.toString(), { method: "GET", credentials: "same-origin" });
                 if (!response.ok) {
                     return false;
                 }
@@ -415,7 +415,7 @@ function createPersistentStorageClient() {
         try {
             const url = new URL(REMOTE_STORAGE_ENDPOINT, window.location.origin);
             url.searchParams.set("keys", keys.join(","));
-            const response = await fetch(url.toString(), { method: "GET" });
+            const response = await fetch(url.toString(), { method: "GET", credentials: "same-origin" });
             if (!response.ok) {
                 return null;
             }
@@ -435,6 +435,7 @@ function createPersistentStorageClient() {
             await fetch(REMOTE_STORAGE_ENDPOINT, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({ data: items }),
             });
             return true;
@@ -453,6 +454,7 @@ function createPersistentStorageClient() {
             await fetch(REMOTE_STORAGE_ENDPOINT, {
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" },
+                credentials: "same-origin",
                 body: JSON.stringify({ keys }),
             });
             return true;
@@ -641,7 +643,7 @@ function buildAudioProxyUrl(url) {
         }
 
         if (parsedUrl.protocol === "http:" && window.location.protocol === "https:") {
-            return `${API.baseUrl}?target=${encodeURIComponent(parsedUrl.toString())}`;
+            return `/proxy?target=${encodeURIComponent(parsedUrl.toString())}`;
         }
 
         return parsedUrl.toString();
@@ -775,7 +777,9 @@ const savedCurrentPlaylist = (() => {
 
 // API配置 - 修复API地址和请求方式
 const API = {
-    baseUrl: "/proxy",
+    get baseUrl() {
+        return "/proxy";
+    },
 
     generateSignature: () => {
         return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -787,6 +791,7 @@ const API = {
                 headers: {
                     "Accept": "application/json",
                 },
+                credentials: "same-origin",
             });
 
             if (!response.ok) {
@@ -2193,7 +2198,7 @@ async function fetchPaletteData(imageUrl, signal) {
         return cached;
     }
 
-    const response = await fetch(`/palette?image=${encodeURIComponent(imageUrl)}`, { signal });
+    const response = await fetch(`/palette?image=${encodeURIComponent(imageUrl)}`, { signal, credentials: "same-origin" });
     const raw = await response.text();
     let payload = null;
     try {
