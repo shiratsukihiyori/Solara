@@ -4,3 +4,6 @@ data/
 
 # Cloudflare Wrangler local state (fallback)
 .wrangler/
+
+# Dependencies
+node_modules/
