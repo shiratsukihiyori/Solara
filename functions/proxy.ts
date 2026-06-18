@@ -125,23 +125,14 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
       return new Response("Missing types", { status: 400 });
     }
 
-    let upstream: Response;
-    try {
-      upstream = await fetch(apiUrl.toString(), {
-        headers: {
-            "User-Agent": BROWSER_UA,
-            "Accept": "application/json",
-        },
-      });
-    } catch (error) {
-      console.error(`[Upstream Fetch Error] ${apiUrl.toString()}`, error);
-      const errHeaders = createCorsHeaders();
-      errHeaders.set("Content-Type", "application/json; charset=utf-8");
-      return new Response(JSON.stringify({ error: "Upstream API unreachable", detail: String(error) }), {
-        status: 502,
-        headers: errHeaders,
-      });
-    }
+    console.log(`[DEBUG] About to fetch: ${apiUrl.toString()}`);
+
+    const errHeaders = createCorsHeaders();
+    errHeaders.set("Content-Type", "application/json; charset=utf-8");
+    return new Response(JSON.stringify({ phase: "pre-fetch", url: apiUrl.toString() }), {
+      status: 200,
+      headers: errHeaders,
+    });
 
     const responseText = await upstream.text();
     const headers = createCorsHeaders(upstream.headers);
