@@ -184,48 +184,6 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
     }
 
     return response;
-
-    const responseText = await upstream.text();
-    const headers = createCorsHeaders(upstream.headers);
-    if (!headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json; charset=utf-8");
-    }
-
-    headers.set("X-Cache-Status", "MISS");
-    headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
-
-    const isSearch = url.searchParams.get("types") === "search";
-    const isEmptyResult = responseText.trim() === "[]";
-    const isError = responseText.includes('"error"') || responseText.includes('"status":0');
-
-    let shouldCache = upstream.status === 200 && request.method === "GET" && !isError;
-
-    if (isSearch && isEmptyResult) {
-      shouldCache = false;
-    }
-
-    if (shouldCache) {
-      headers.set("Cache-Control", "public, s-maxage=300, max-age=300");
-    } else {
-      headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
-    }
-
-    const response = new Response(responseText, {
-      status: upstream.status,
-      statusText: upstream.statusText,
-      headers,
-    });
-
-    if (shouldCache && waitUntil && cache) {
-      try {
-        waitUntil(cache.put(cacheKey, response.clone()));
-        console.log(`[Cache PUT] Saved to cache: ${url.toString()}`);
-      } catch (err) {
-        console.warn(`[Cache PUT Error] ${url.toString()}`, err);
-      }
-    }
-
-    return response;
   } catch (error) {
     console.error(`[proxyApiRequest Error]`, error);
     const errHeaders = createCorsHeaders();
