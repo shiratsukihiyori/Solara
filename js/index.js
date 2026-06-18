@@ -1681,6 +1681,8 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
         if (normalized) {
             setGlobalThemeProperty("--bg-gradient", normalized);
             setGlobalThemeProperty("--bg-gradient-next", normalized);
+            removeGlobalThemeProperty("--bg-image");
+            removeGlobalThemeProperty("--bg-image-next");
         } else {
             removeGlobalThemeProperty("--bg-gradient");
             removeGlobalThemeProperty("--bg-gradient-next");
@@ -1695,6 +1697,8 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
         if (normalized) {
             setGlobalThemeProperty("--bg-gradient", normalized);
             setGlobalThemeProperty("--bg-gradient-next", normalized);
+            removeGlobalThemeProperty("--bg-image");
+            removeGlobalThemeProperty("--bg-image-next");
         } else {
             removeGlobalThemeProperty("--bg-gradient");
             removeGlobalThemeProperty("--bg-gradient-next");
@@ -1706,6 +1710,7 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
 
     if (normalized) {
         setGlobalThemeProperty("--bg-gradient-next", normalized);
+        removeGlobalThemeProperty("--bg-image-next");
     } else {
         removeGlobalThemeProperty("--bg-gradient-next");
     }
@@ -1716,6 +1721,8 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
             if (normalized) {
                 setGlobalThemeProperty("--bg-gradient", normalized);
                 setGlobalThemeProperty("--bg-gradient-next", normalized);
+                removeGlobalThemeProperty("--bg-image");
+                removeGlobalThemeProperty("--bg-image-next");
             } else {
                 removeGlobalThemeProperty("--bg-gradient");
                 removeGlobalThemeProperty("--bg-gradient-next");
