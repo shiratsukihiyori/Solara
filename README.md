@@ -125,4 +125,4 @@ npm run deploy
 
 ## 许可证
 
-CC BY-NC-SA
+[CC BY-NC-SA 4.0](LICENSE) — 禁止商用，衍生项目必须保留出处并以相同协议开源。
