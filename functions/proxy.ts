@@ -128,9 +128,12 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
     let upstream: Response;
     try {
       upstream = await fetch(apiUrl.toString(), {
+        redirect: "manual",
         headers: {
             "User-Agent": BROWSER_UA,
             "Accept": "application/json",
+            "CF-Visitor": '{"scheme":"https"}',
+            "X-Forwarded-Proto": "https",
         },
       });
     } catch (error) {
