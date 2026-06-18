@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
+const API_BASE_URL = "http://music-api.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
@@ -125,12 +125,66 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
       return new Response("Missing types", { status: 400 });
     }
 
-    const testHeaders = createCorsHeaders();
-    testHeaders.set("Content-Type", "application/json; charset=utf-8");
-    return new Response(JSON.stringify({ status: "ok", mode: "direct", ts: Date.now() }), {
-      status: 200,
-      headers: testHeaders,
+    let upstream: Response;
+    try {
+      upstream = await fetch(apiUrl.toString(), {
+        redirect: "manual",
+        headers: {
+            "User-Agent": BROWSER_UA,
+            "Accept": "application/json",
+        },
+      });
+    } catch (error) {
+      console.error(`[Upstream Fetch Error] ${apiUrl.toString()}`, error);
+      const errHeaders = createCorsHeaders();
+      errHeaders.set("Content-Type", "application/json; charset=utf-8");
+      return new Response(JSON.stringify({ error: "Upstream API unreachable", detail: String(error) }), {
+        status: 502,
+        headers: errHeaders,
+      });
+    }
+
+    const responseText = await upstream.text();
+    const headers = createCorsHeaders(upstream.headers);
+    if (!headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json; charset=utf-8");
+    }
+
+    headers.set("X-Cache-Status", "MISS");
+    headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
+
+    const isSearch = url.searchParams.get("types") === "search";
+    const isEmptyResult = responseText.trim() === "[]";
+    const isError = responseText.includes('"error"') || responseText.includes('"status":0');
+
+    let shouldCache = upstream.status === 200 && request.method === "GET" && !isError;
+
+    if (isSearch && isEmptyResult) {
+      shouldCache = false;
+    }
+
+    if (shouldCache) {
+      headers.set("Cache-Control", "public, s-maxage=300, max-age=300");
+    } else {
+      headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    }
+
+    const response = new Response(responseText, {
+      status: upstream.status,
+      statusText: upstream.statusText,
+      headers,
     });
+
+    if (shouldCache && waitUntil && cache) {
+      try {
+        waitUntil(cache.put(cacheKey, response.clone()));
+        console.log(`[Cache PUT] Saved to cache: ${url.toString()}`);
+      } catch (err) {
+        console.warn(`[Cache PUT Error] ${url.toString()}`, err);
+      }
+    }
+
+    return response;
   } catch (error) {
     console.error(`[proxyApiRequest Error]`, error);
     const errHeaders = createCorsHeaders();
