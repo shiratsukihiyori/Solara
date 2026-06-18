@@ -126,22 +126,11 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
     }
 
     let upstream: Response;
-    const useHttps = true;
-    const targetUrl = useHttps
-      ? apiUrl.toString().replace("http://", "https://")
-      : apiUrl.toString();
-
     try {
-      upstream = await fetch(targetUrl, {
+      upstream = await fetch(apiUrl.toString(), {
         headers: {
             "User-Agent": BROWSER_UA,
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Referer": "https://music-api.gdstudio.xyz/",
-            "Sec-Fetch-Dest": "empty",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Site": "same-origin",
-            "DNT": "1",
+            "Accept": "application/json",
         },
       });
     } catch (error) {
