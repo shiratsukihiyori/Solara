@@ -91,6 +91,14 @@ const dom = {
 
 window.SolaraHiyoriRemixDom = dom;
 
+const RADAR_FALLBACK_PLAYLISTS = [
+    "3778678",
+    "7422972414",
+    "5307397774",
+    "7558416684",
+    "5254560558",
+];
+
 const isMobileView = Boolean(window.__SOLARA_IS_MOBILE);
 
 const mobileBridge = window.SolaraHiyoriRemixMobileBridge || {};
@@ -1001,6 +1009,8 @@ const state = {
     heartbeatMode: false,
     lastRadarGenre: null,
     _heartbeatLoading: false,
+    _radarPage: 1,
+    _radarFallbackIndex: 0,
 };
 
 let importSelectedMenuOutsideHandler = null;
@@ -6182,13 +6192,19 @@ async function exploreOnlineMusic(genre) {
 
         const randomGenre = genre || pickRandomExploreGenre();
         state.lastRadarGenre = randomGenre;
+
+        if (!genre) {
+            state._radarPage = 1;
+        }
+        const page = state._radarPage;
+
         const sourcesToTry = shuffleArray(EXPLORE_RADAR_SOURCES);
         let lastError = null;
 
         for (const source of sourcesToTry) {
             let results;
             try {
-                results = await API.search(randomGenre, source, 30, 1);
+                results = await API.search(randomGenre, source, 30, page);
             } catch (searchError) {
                 debugLog(`探索雷达音源 ${source} 搜索失败: ${searchError.message}`);
                 lastError = searchError;
@@ -6236,6 +6252,10 @@ async function exploreOnlineMusic(genre) {
             }
 
             if (appendedSongs.length === 0) {
+                state._radarPage = 1;
+                if (genre) {
+                    return;
+                }
                 showNotification("探索雷达：本次未找到新的歌曲，当前列表已包含这些曲目", "info");
                 debugLog(`探索雷达无新增歌曲，关键词：${randomGenre}`);
                 return;
@@ -6252,6 +6272,8 @@ async function exploreOnlineMusic(genre) {
             showNotification(`探索雷达：新增${appendedSongs.length}首 ${randomGenre} 歌曲`);
             debugLog(`探索雷达加载成功，关键词：${randomGenre}，音源：${source}，新增歌曲数：${appendedSongs.length}`);
 
+            state._radarPage = page + 1;
+
             const shouldAutoplay = existingSongs.length === 0 && state.playlistSongs.length > 0;
             if (shouldAutoplay) {
                 await playPlaylistSong(0);
@@ -6259,6 +6281,61 @@ async function exploreOnlineMusic(genre) {
                 savePlayerState();
             }
             return;
+        }
+
+        state._radarPage = 1;
+
+        if (!state._radarFallbacking && genre) {
+            state._radarFallbacking = true;
+            try {
+                for (let i = 0; i < RADAR_FALLBACK_PLAYLISTS.length; i++) {
+                    const idx = (state._radarFallbackIndex + i) % RADAR_FALLBACK_PLAYLISTS.length;
+                    const playlistId = RADAR_FALLBACK_PLAYLISTS[idx];
+                    debugLog(`探索雷达关键词搜尽，尝试歌单兜底: ${playlistId}`);
+
+                    const tracks = await API.getRadarPlaylist(playlistId, { limit: 30 });
+                    if (!Array.isArray(tracks) || tracks.length === 0) continue;
+
+                    const existingKeys = new Set((state.playlistSongs || [])
+                        .map(s => getSongKey(s))
+                        .filter(k => typeof k === "string" && k.length > 0));
+
+                    const appendedSongs = [];
+                    for (const track of tracks) {
+                        const key = getSongKey(track);
+                        if (key && existingKeys.has(key)) continue;
+                        appendedSongs.push(track);
+                        if (key) existingKeys.add(key);
+                    }
+
+                    if (appendedSongs.length > 0) {
+                        state._radarFallbackIndex = (idx + 1) % RADAR_FALLBACK_PLAYLISTS.length;
+                        state.playlistSongs = (state.playlistSongs || []).concat(appendedSongs);
+                        state.onlineSongs = state.playlistSongs.slice();
+                        state.currentPlaylist = "playlist";
+                        state.currentList = "playlist";
+
+                        renderPlaylist();
+                        updatePlaylistHighlight();
+
+                        showNotification(`探索雷达：歌单补充${appendedSongs.length}首新歌`, "success");
+                        debugLog(`探索雷达歌单兜底成功，歌单ID：${playlistId}，新增歌曲数：${appendedSongs.length}`);
+
+                        const shouldAutoplay = state.playlistSongs.length === appendedSongs.length;
+                        if (shouldAutoplay) {
+                            await playPlaylistSong(0);
+                        } else {
+                            savePlayerState();
+                        }
+                        state._radarFallbacking = false;
+                        return;
+                    }
+                }
+            } catch (fbError) {
+                debugLog(`探索雷达歌单兜底失败: ${fbError.message}`);
+            } finally {
+                state._radarFallbacking = false;
+            }
         }
 
         throw lastError || new Error('所有音源均无法获取可播放的歌曲');
