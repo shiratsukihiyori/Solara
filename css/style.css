@@ -96,17 +96,11 @@ body {
 }
 
 .background-stage__layer--base {
-    background-image: var(--bg-image, var(--bg-gradient));
+    background-image: var(--bg-image, none), var(--bg-gradient);
 }
 
 .background-stage__layer--transition {
-    background-image: var(--bg-image-next, var(--bg-gradient-next));
-    opacity: 0;
-    transition: opacity 0.85s ease;
-}
-
-body.background-transitioning .background-stage__layer--transition {
-    opacity: 1;
+    background-image: var(--bg-image-next, none), var(--bg-gradient-next);
 }
 
 /* 16:9 容器布局 */

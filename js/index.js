@@ -1839,6 +1839,8 @@ function applyDynamicGradient(options = {}) {
 
     applyThemeTokens(defaults);
 
+    let gradientValue = "";
+
     const palette = state.dynamicPalette;
     if (palette && palette.gradients) {
         const gradients = palette.gradients;
@@ -1864,6 +1866,10 @@ function applyDynamicGradient(options = {}) {
             }
         }
 
+        if (gradientInfo && gradientInfo.gradient) {
+            gradientValue = gradientInfo.gradient;
+        }
+
         if (palette.tokens) {
             const tokens = palette.tokens[gradientMode] || palette.tokens[mode];
             if (tokens) {
@@ -1872,7 +1878,7 @@ function applyDynamicGradient(options = {}) {
         }
     }
 
-    setDocumentGradient("", options);
+    setDocumentGradient(gradientValue, options);
 }
 
 function queueDefaultPalette(options = {}) {
