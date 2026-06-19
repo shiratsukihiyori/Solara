@@ -1837,7 +1837,6 @@ function applyDynamicGradient(options = {}) {
     const mode = isDark ? "dark" : "light";
     const defaults = themeDefaults[mode];
 
-    let targetGradient = defaults.gradient || "";
     applyThemeTokens(defaults);
 
     const palette = state.dynamicPalette;
@@ -1865,10 +1864,6 @@ function applyDynamicGradient(options = {}) {
             }
         }
 
-        if (gradientInfo && gradientInfo.gradient) {
-            targetGradient = gradientInfo.gradient;
-        }
-
         if (palette.tokens) {
             const tokens = palette.tokens[gradientMode] || palette.tokens[mode];
             if (tokens) {
@@ -1877,7 +1872,7 @@ function applyDynamicGradient(options = {}) {
         }
     }
 
-    setDocumentGradient(targetGradient, options);
+    setDocumentGradient("", options);
 }
 
 function queueDefaultPalette(options = {}) {
