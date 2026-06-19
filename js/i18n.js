@@ -84,6 +84,8 @@
         "保存设置": "Save Settings",
         "已保存设置": "Settings saved",
         "请至少选择一个风格": "Please select at least one genre",
+        "心动模式": "Heartbeat Mode",
+        "开启后，探索雷达将在歌曲即将播放完毕时自动补充同风格歌曲，不间断推送。": "When enabled, the radar will automatically refill similar songs as the playlist winds down for non-stop listening.",
         "云端加载设置失败": "Failed to load settings from cloud"
     };
 

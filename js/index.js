@@ -85,6 +85,7 @@ const dom = {
     saveSettingsBtn: document.getElementById("saveSettingsBtn"),
     openSettingsBtn: document.getElementById("openSettingsBtn"),
     radarGenreList: document.getElementById("radarGenreList"),
+    heartbeatModeCheckbox: document.getElementById("heartbeatMode"),
     logo: document.querySelector(".header h1"),
 };
 
@@ -997,6 +998,9 @@ const state = {
     currentGradient: '',
     isMobileInlineLyricsOpen: false,
     selectedSearchResults: new Set(),
+    heartbeatMode: false,
+    lastRadarGenre: null,
+    _heartbeatLoading: false,
 };
 
 let importSelectedMenuOutsideHandler = null;
@@ -5940,6 +5944,17 @@ function playNext() {
         return;
     }
 
+    if (state.heartbeatMode && state.currentPlaylist === "playlist"
+        && playlist.length > 0 && !state._heartbeatLoading) {
+        const remaining = playlist.length - state.currentTrackIndex - 1;
+        if (remaining <= 3 && state.lastRadarGenre) {
+            state._heartbeatLoading = true;
+            exploreOnlineMusic(state.lastRadarGenre).finally(() => {
+                state._heartbeatLoading = false;
+            });
+        }
+    }
+
     const mode = state.playMode || "list";
     if (mode === "random") {
         // 随机播放
@@ -6138,7 +6153,8 @@ async function verifySourceHasUrl(song) {
 }
 
 // 探索雷达：通过代理后端随机搜歌并刷新播放列表
-async function exploreOnlineMusic() {
+// genre - 可选，指定搜索风格；若不传则随机挑选
+async function exploreOnlineMusic(genre) {
     const desktopButton = dom.loadOnlineBtn;
     const mobileButton = dom.mobileExploreButton;
     const btnText = desktopButton ? desktopButton.querySelector(".btn-text") : null;
@@ -6164,7 +6180,8 @@ async function exploreOnlineMusic() {
     try {
         setLoadingState(true);
 
-        const randomGenre = pickRandomExploreGenre();
+        const randomGenre = genre || pickRandomExploreGenre();
+        state.lastRadarGenre = randomGenre;
         const sourcesToTry = shuffleArray(EXPLORE_RADAR_SOURCES);
         let lastError = null;
 
@@ -6597,6 +6614,7 @@ function renderGenreList() {
 
 function openSettingsModal() {
     if (dom.settingsModal) {
+        applySettingsToUI();
         dom.settingsModal.classList.add("show");
         dom.settingsModal.setAttribute("aria-hidden", "false");
     }
@@ -6617,9 +6635,13 @@ async function saveSettings() {
         return;
     }
 
+    const heartbeatMode = dom.heartbeatModeCheckbox ? dom.heartbeatModeCheckbox.checked : false;
+
     state.radarSettings = {
-        genres: selectedGenres
+        genres: selectedGenres,
+        heartbeatMode: heartbeatMode
     };
+    state.heartbeatMode = heartbeatMode;
 
     // 本地保存
     safeSetLocalStorage("radarSettings", JSON.stringify(state.radarSettings));
@@ -6650,12 +6672,19 @@ async function loadSettings() {
 }
 
 function applySettingsToUI() {
-    if (!state.radarSettings || !state.radarSettings.genres || !dom.radarGenreList) return;
+    if (!state.radarSettings || !dom.radarGenreList) return;
     
-    const checkboxes = dom.radarGenreList.querySelectorAll("input[type='checkbox']");
-    checkboxes.forEach(cb => {
-        cb.checked = state.radarSettings.genres.includes(cb.value);
-    });
+    if (state.radarSettings.genres) {
+        const checkboxes = dom.radarGenreList.querySelectorAll("input[type='checkbox']");
+        checkboxes.forEach(cb => {
+            cb.checked = state.radarSettings.genres.includes(cb.value);
+        });
+    }
+
+    if (dom.heartbeatModeCheckbox && typeof state.radarSettings.heartbeatMode === "boolean") {
+        dom.heartbeatModeCheckbox.checked = state.radarSettings.heartbeatMode;
+        state.heartbeatMode = state.radarSettings.heartbeatMode;
+    }
 }
 
 // 在 bootstrapPersistentStorage 之后或期间初始化设置
