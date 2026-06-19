@@ -1,13 +1,14 @@
-const API_BASE_URL = "http://music-api.gdstudio.xyz/api.php";
+const API_BASE_URL = "https://music-api.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
 const NETEASE_API_BASE = "https://music.163.com/api";
 
-function createCorsHeaders(init?: Headers): Headers {
+function createCorsHeaders(init?: Headers | Record<string, string>): Headers {
   const headers = new Headers();
   if (init) {
-    for (const [key, value] of init.entries()) {
+    const entries = init instanceof Headers ? init.entries() : Object.entries(init);
+    for (const [key, value] of entries) {
       if (SAFE_RESPONSE_HEADERS.includes(key.toLowerCase())) {
         headers.set(key, value);
       }
@@ -86,23 +87,62 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
 }
 
 async function fetchNeteasePlaylistDirect(playlistId: string, limit: number): Promise<Response> {
-  const neteaseUrl = `${NETEASE_API_BASE}/v6/playlist/detail?id=${playlistId}&n=${limit}&s=0`;
-  console.log(`[Netease Direct] Fetching playlist: ${neteaseUrl}`);
-  const upstream = await fetch(neteaseUrl, {
-    headers: {
-      "User-Agent": BROWSER_UA,
-      "Referer": "https://music.163.com/",
-      "Accept": "application/json",
-    },
-  });
-  const data: any = await upstream.json();
-  if (data.code !== 200 || !data.playlist) {
+  const PLAYLIST_HEADERS = {
+    "User-Agent": BROWSER_UA,
+    "Referer": "https://music.163.com/",
+    "Accept": "application/json",
+  };
+
+  // Step 1: get track IDs from v6 API (returns all trackIds + first 10 tracks)
+  const v6Url = `${NETEASE_API_BASE}/v6/playlist/detail?id=${playlistId}&n=${limit}&s=0`;
+  console.log(`[Netease Direct] Fetching v6: ${v6Url}`);
+  const v6Resp = await fetch(v6Url, { headers: PLAYLIST_HEADERS });
+  const v6Data: any = await v6Resp.json();
+  if (v6Data.code !== 200 || !v6Data.playlist) {
     return new Response(JSON.stringify({ error: "Netease direct fetch failed" }), {
       status: 502,
       headers: createCorsHeaders({ "Content-Type": "application/json; charset=utf-8" }),
     });
   }
-  const tracks = Array.isArray(data.playlist.tracks) ? data.playlist.tracks.slice(0, limit) : [];
+
+  const existingTracks: any[] = Array.isArray(v6Data.playlist.tracks) ? v6Data.playlist.tracks : [];
+  const trackIds: Array<{ id: number }> = Array.isArray(v6Data.playlist.trackIds) ? v6Data.playlist.trackIds : [];
+
+  // Step 2: collect IDs not in existing tracks
+  const existingIdSet = new Set(existingTracks.map((t: any) => t.id));
+  const missingIds = trackIds.filter((ti: { id: number }) => !existingIdSet.has(ti.id)).map((ti: { id: number }) => ti.id);
+
+  if (missingIds.length > 0) {
+    // Step 3: fetch missing track details via POST to v3/song/detail
+    const batchSize = 100;
+    for (let i = 0; i < missingIds.length; i += batchSize) {
+      const batch = missingIds.slice(i, i + batchSize);
+      const payload = batch.map((id: number) => JSON.stringify({ id })).join(",");
+      const bodyStr = `c=[${payload}]`;
+      console.log(`[Netease Direct] POST song detail for ${batch.length} tracks`);
+      try {
+        const resp = await fetch(`${NETEASE_API_BASE}/v3/song/detail`, {
+          method: "POST",
+          headers: {
+            ...PLAYLIST_HEADERS,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: bodyStr,
+        });
+        const text = await resp.text();
+        if (text.startsWith("{")) {
+          const data = JSON.parse(text);
+          if (data.code === 200 && Array.isArray(data.songs)) {
+            for (const s of data.songs) existingTracks.push(s);
+          }
+        }
+      } catch (e) {
+        console.warn(`[Netease Direct] Song detail POST failed:`, e);
+      }
+    }
+  }
+
+  const tracks = existingTracks.slice(0, Math.min(limit, trackIds.length));
   const result = { playlist: { tracks } };
   const headers = createCorsHeaders({
     "Content-Type": "application/json; charset=utf-8",

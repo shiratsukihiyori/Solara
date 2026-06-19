@@ -369,6 +369,12 @@ const themeDefaults = {
     }
 };
 let paletteRequestId = 0;
+let _lastPlayedSongKey = null;
+
+function getSongIdentity(song) {
+    if (!song || typeof song !== "object") return "";
+    return (song.name || "") + "::" + (song.artist || "");
+}
 
 const REMOTE_STORAGE_ENDPOINT = "/api/storage";
 let remoteSyncEnabled = false;
@@ -2333,6 +2339,26 @@ async function updateDynamicBackground(imageUrl) {
 
     let controller = null;
     try {
+        // 优先使用前端 Canvas 提取（支持所有图片格式，不依赖服务器解码）
+        console.log(`[Palette FRONTEND] Attempting extraction using Frontend Canvas API...`);
+        const clientPalette = await extractPaletteFromCanvas(imageUrl);
+        if (requestId !== paletteRequestId) {
+            return;
+        }
+
+        if (paletteCache.has(imageUrl)) {
+            paletteCache.delete(imageUrl);
+        }
+        paletteCache.set(imageUrl, clientPalette);
+        persistPaletteCache();
+
+        queuePaletteApplication(clientPalette, imageUrl);
+        debugLog("[前端提取] 动态背景提取成功");
+        console.log(`[Palette FRONTEND] Successfully extracted colors using Frontend Canvas API: ${imageUrl}`);
+    } catch (canvasError) {
+        console.warn(`[Palette FRONTEND] Canvas extraction failed:`, canvasError);
+        debugLog("[前端提取] 失败，尝试后端解析");
+
         if (paletteAbortController) {
             paletteAbortController.abort();
         }
@@ -2340,42 +2366,20 @@ async function updateDynamicBackground(imageUrl) {
         controller = new AbortController();
         paletteAbortController = controller;
 
-        const palette = await fetchPaletteData(imageUrl, controller.signal);
-        if (requestId !== paletteRequestId) {
-            return;
-        }
-        queuePaletteApplication(palette, imageUrl);
-        debugLog("[后端解析] 动态背景提取成功");
-        console.log(`[Palette BACKEND] Successfully extracted colors using Backend API: ${imageUrl}`);
-    } catch (error) {
-        if (error?.name === "AbortError") {
-            return;
-        }
-
-        console.warn(`[Palette ERROR] Backend extraction failed:`, error);
-        debugLog("[后端解析] 失败，尝试前端降级");
-
         try {
-            // 降级方案：使用客户端 Canvas 提取 (支持 PNG/WebP 且绕过服务器解码限制)
-            console.log(`[Palette FALLBACK] Attempting extraction using Frontend Canvas API...`);
-            const clientPalette = await extractPaletteFromCanvas(imageUrl);
+            const palette = await fetchPaletteData(imageUrl, controller.signal);
             if (requestId !== paletteRequestId) {
                 return;
             }
-
-            // 提取成功后存入缓存，下次可直接使用
-            if (paletteCache.has(imageUrl)) {
-                paletteCache.delete(imageUrl);
+            queuePaletteApplication(palette, imageUrl);
+            debugLog("[后端解析] 动态背景提取成功");
+            console.log(`[Palette BACKEND] Successfully extracted colors using Backend API: ${imageUrl}`);
+        } catch (backendError) {
+            if (backendError?.name === "AbortError") {
+                return;
             }
-            paletteCache.set(imageUrl, clientPalette);
-            persistPaletteCache();
-
-            queuePaletteApplication(clientPalette, imageUrl);
-            debugLog("[前端降级] 动态背景提取成功");
-            console.log(`[Palette FRONTEND] Successfully extracted colors using Frontend Canvas API: ${imageUrl}`);
-        } catch (fallbackError) {
-            console.warn("客户端降级提取也失败了:", fallbackError);
-            debugLog(`[前端降级] 失败: 使用默认背景`);
+            console.warn(`[Palette ERROR] Backend extraction also failed:`, backendError);
+            debugLog("[后端解析] 失败: 使用默认背景");
             if (requestId === paletteRequestId) {
                 resetDynamicBackground();
             }
@@ -5737,6 +5741,11 @@ function waitForAudioReady(player) {
 async function playSong(song, options = {}) {
     const { autoplay = true, startTime = 0, preserveProgress = false } = options;
 
+    const songKey = getSongIdentity(song);
+    const isSameSong = songKey && songKey === _lastPlayedSongKey;
+
+    _lastPlayedSongKey = null;
+
     window.clearTimeout(pendingPaletteTimer);
     state.audioReadyForPalette = false;
     state.pendingPaletteData = null;
@@ -5744,7 +5753,9 @@ async function playSong(song, options = {}) {
     state.pendingPaletteImmediate = false;
     state.pendingPaletteReady = false;
 
-    refreshBackground();
+    if (!isSameSong) {
+        refreshBackground();
+    }
 
     try {
         updateCurrentSongInfo(song, { loadArtwork: false });
@@ -5862,6 +5873,8 @@ async function playSong(song, options = {}) {
         }
 
         scheduleDeferredSongAssets(song, playPromise);
+
+        _lastPlayedSongKey = songKey;
 
         debugLog(`开始播放: ${song.name} @${quality}`);
 
@@ -6816,11 +6829,26 @@ async function saveSettings() {
 }
 
 // 自定义歌单直接播放
+function parseNeteasePlaylistId(input) {
+    const trimmed = input.trim();
+    if (/^\d+$/.test(trimmed)) return trimmed;
+    const patterns = [
+        /[?&]id=(\d+)/,
+        /\/playlist\/(\d+)/,
+        /\/share\/playlist\/(\d+)/,
+    ];
+    for (const p of patterns) {
+        const m = trimmed.match(p);
+        if (m) return m[1];
+    }
+    return null;
+}
+
 async function loadCustomPlaylist() {
     const raw = dom.fallbackPlaylistIds ? dom.fallbackPlaylistIds.value.trim() : "";
-    const ids = raw.split(/\n|,/).map(s => s.trim()).filter(id => /^\d+$/.test(id));
+    const ids = raw.split(/\n|,/).map(s => parseNeteasePlaylistId(s)).filter(Boolean);
     if (ids.length === 0) {
-        showNotification("请先输入歌单 ID", "warning");
+        showNotification("请输入歌单 ID 或网易云歌单链接", "warning");
         return;
     }
     const btn = dom.loadCustomPlaylistBtn;
