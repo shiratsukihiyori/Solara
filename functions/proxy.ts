@@ -94,7 +94,7 @@ async function fetchNeteasePlaylistDirect(playlistId: string, limit: number): Pr
   };
 
   // Step 1: get track IDs from v6 API (returns all trackIds + first 10 tracks)
-  const v6Url = `${NETEASE_API_BASE}/v6/playlist/detail?id=${playlistId}&n=${limit}&s=0`;
+  const v6Url = `${NETEASE_API_BASE}/v6/playlist/detail?id=${playlistId}&n=1000&s=0`;
   console.log(`[Netease Direct] Fetching v6: ${v6Url}`);
   const v6Resp = await fetch(v6Url, { headers: PLAYLIST_HEADERS });
   const v6Data: any = await v6Resp.json();
@@ -115,34 +115,48 @@ async function fetchNeteasePlaylistDirect(playlistId: string, limit: number): Pr
   if (missingIds.length > 0) {
     // Step 3: fetch missing track details via POST to v3/song/detail
     const batchSize = 100;
+    const maxRetries = 3;
     for (let i = 0; i < missingIds.length; i += batchSize) {
       const batch = missingIds.slice(i, i + batchSize);
-      const payload = batch.map((id: number) => JSON.stringify({ id })).join(",");
-      const bodyStr = `c=[${payload}]`;
-      console.log(`[Netease Direct] POST song detail for ${batch.length} tracks`);
-      try {
-        const resp = await fetch(`${NETEASE_API_BASE}/v3/song/detail`, {
-          method: "POST",
-          headers: {
-            ...PLAYLIST_HEADERS,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: bodyStr,
-        });
-        const text = await resp.text();
-        if (text.startsWith("{")) {
-          const data = JSON.parse(text);
-          if (data.code === 200 && Array.isArray(data.songs)) {
-            for (const s of data.songs) existingTracks.push(s);
+      let success = false;
+      for (let attempt = 1; attempt <= maxRetries && !success; attempt++) {
+        const payload = batch.map((id: number) => JSON.stringify({ id })).join(",");
+        const bodyStr = `c=[${payload}]`;
+        console.log(`[Netease Direct] POST song detail for ${batch.length} tracks (attempt ${attempt}/${maxRetries})`);
+        try {
+          const resp = await fetch(`${NETEASE_API_BASE}/v3/song/detail`, {
+            method: "POST",
+            headers: {
+              ...PLAYLIST_HEADERS,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: bodyStr,
+          });
+          const text = await resp.text();
+          if (text.startsWith("{")) {
+            const data = JSON.parse(text);
+            if (data.code === 200 && Array.isArray(data.songs)) {
+              for (const s of data.songs) existingTracks.push(s);
+              success = true;
+            }
+          }
+        } catch (e) {
+          console.warn(`[Netease Direct] Song detail POST failed (attempt ${attempt}/${maxRetries}):`, e);
+          if (attempt < maxRetries) {
+            const delay = 1000 * Math.pow(2, attempt - 1);
+            console.log(`[Netease Direct] Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
           }
         }
-      } catch (e) {
-        console.warn(`[Netease Direct] Song detail POST failed:`, e);
+      }
+      // 避免触发网易云限流
+      if (i + batchSize < missingIds.length) {
+        await new Promise(r => setTimeout(r, 500));
       }
     }
   }
 
-  const tracks = existingTracks.slice(0, Math.min(limit, trackIds.length));
+  const tracks = existingTracks.slice(0, trackIds.length);
   const result = { playlist: { tracks } };
   const headers = createCorsHeaders({
     "Content-Type": "application/json; charset=utf-8",
