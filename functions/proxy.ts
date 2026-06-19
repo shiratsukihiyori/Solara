@@ -2,6 +2,7 @@ const API_BASE_URL = "http://music-api.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
 const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
+const NETEASE_API_BASE = "https://music.163.com/api";
 
 function createCorsHeaders(init?: Headers): Headers {
   const headers = new Headers();
@@ -84,9 +85,39 @@ async function proxyKuwoAudio(targetUrl: string, request: Request): Promise<Resp
   });
 }
 
+async function fetchNeteasePlaylistDirect(playlistId: string, limit: number): Promise<Response> {
+  const neteaseUrl = `${NETEASE_API_BASE}/v6/playlist/detail?id=${playlistId}&n=${limit}&s=0`;
+  console.log(`[Netease Direct] Fetching playlist: ${neteaseUrl}`);
+  const upstream = await fetch(neteaseUrl, {
+    headers: {
+      "User-Agent": BROWSER_UA,
+      "Referer": "https://music.163.com/",
+      "Accept": "application/json",
+    },
+  });
+  const data: any = await upstream.json();
+  if (data.code !== 200 || !data.playlist) {
+    return new Response(JSON.stringify({ error: "Netease direct fetch failed" }), {
+      status: 502,
+      headers: createCorsHeaders({ "Content-Type": "application/json; charset=utf-8" }),
+    });
+  }
+  const tracks = Array.isArray(data.playlist.tracks) ? data.playlist.tracks.slice(0, limit) : [];
+  const result = { playlist: { tracks } };
+  const headers = createCorsHeaders({
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "public, max-age=300",
+    "X-Cache-Status": "MISS",
+    "X-Source": "netease-direct",
+  });
+  headers.set("Access-Control-Expose-Headers", "X-Cache-Status, X-Source");
+  return new Response(JSON.stringify(result), { status: 200, headers });
+}
+
 async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise: Promise<any>) => void): Promise<Response> {
   try {
     const cache = typeof caches !== "undefined" ? caches.default : null;
+    const types = url.searchParams.get("types");
     
     const cacheUrl = new URL(url.toString());
     cacheUrl.searchParams.delete("s");
@@ -135,6 +166,12 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
       });
     } catch (error) {
       console.error(`[Upstream Fetch Error] ${apiUrl.toString()}`, error);
+      // 第三方 API 不可达时，playlist 类型尝试直连网易云
+      if (types === "playlist") {
+        const pid = url.searchParams.get("id");
+        const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+        if (pid) return await fetchNeteasePlaylistDirect(pid, limit);
+      }
       const errHeaders = createCorsHeaders();
       errHeaders.set("Content-Type", "application/json; charset=utf-8");
       return new Response(JSON.stringify({ error: "Upstream API unreachable", detail: String(error) }), {
@@ -152,9 +189,19 @@ async function proxyApiRequest(url: URL, request: Request, waitUntil?: (promise:
     headers.set("X-Cache-Status", "MISS");
     headers.set("Access-Control-Expose-Headers", "X-Cache-Status");
 
-    const isSearch = url.searchParams.get("types") === "search";
+    const isSearch = types === "search";
     const isEmptyResult = responseText.trim() === "[]";
     const isError = responseText.includes('"error"') || responseText.includes('"status":0');
+
+    // 第三方 API 返回错误时，playlist 类型尝试直连网易云
+    if (types === "playlist" && (upstream.status !== 200 || isError)) {
+      const pid = url.searchParams.get("id");
+      const limit = parseInt(url.searchParams.get("limit") || "50", 10);
+      if (pid) {
+        console.log(`[Upstream Error] Third-party failed for playlist ${pid}, trying direct Netease`);
+        return await fetchNeteasePlaylistDirect(pid, limit);
+      }
+    }
 
     let shouldCache = upstream.status === 200 && request.method === "GET" && !isError;
 

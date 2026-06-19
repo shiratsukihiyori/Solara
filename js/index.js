@@ -5992,6 +5992,15 @@ function playNext() {
             exploreOnlineMusic(state.lastRadarGenre).finally(() => {
                 state._heartbeatLoading = false;
                 debugLog(`[心跳] 补充完成`);
+                // 如果心跳加载期间播放停在了末尾，补完后自动继续
+                const pl = state.currentPlaylist === "playlist" ? state.playlistSongs
+                    : state.currentPlaylist === "online" ? state.onlineSongs
+                    : state.currentPlaylist === "search" ? state.searchResults
+                    : [];
+                if (state.heartbeatMode && pl.length > 0
+                    && state.currentTrackIndex >= pl.length - 1) {
+                    setTimeout(() => playNext(), 100);
+                }
             });
         }
     }
@@ -6001,8 +6010,12 @@ function playNext() {
         // 随机播放
         nextIndex = Math.floor(Math.random() * playlist.length);
     } else if (mode === "list") {
-        // 列表循环
-        nextIndex = (state.currentTrackIndex + 1) % playlist.length;
+        // 列表循环 — 心跳加载中时不绕回开头
+        if (state._heartbeatLoading && state.currentTrackIndex >= playlist.length - 1) {
+            nextIndex = -1;
+        } else {
+            nextIndex = (state.currentTrackIndex + 1) % playlist.length;
+        }
     } else if (mode === "single") {
         nextIndex = state.currentTrackIndex >= 0 ? state.currentTrackIndex : 0;
     }
