@@ -121,7 +121,7 @@ npm run deploy
 ## 致谢
 
 - [Akudamatata](https://github.com/akudamatata) — [Solara 原版](https://github.com/akudamatata/Solara)
-- [GD音乐台](https://music.gdstudio.xyz) — 免费音乐 API
+- [GD音乐台](https://music.gdstudio.xyz) — 音乐 API
 - [牛就是牛@ufoo](https://linux.do/t/topic/942415) — 灵感启发
 
 ## 许可证
