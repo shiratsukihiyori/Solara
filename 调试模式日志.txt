@@ -1,0 +1,50 @@
+10:19:58: 探索雷达加载成功，关键词：[object PointerEvent]，音源：netease，新增歌曲数：2
+10:19:58: 获取音频URL: https://music-api-hk.gdstudio.xyz/api.php?types=url&id=1876043596&source=netease&br=320&s=a96s7ec4vuf9hg6miqxsmh
+10:19:58: [直连API] url 请求成功
+10:19:58: 开始播放: [FREE]#Contradict @320
+10:19:58: 获取歌词URL: https://music-api-hk.gdstudio.xyz/api.php?types=lyric&id=1876043596&source=netease&s=86snrwifsld7qiajtxmo0e
+10:19:59: [直连API] pic 请求成功
+10:19:59: [直连API] lyric 请求成功
+10:19:59: 解析歌词完成: 3 行
+10:19:59: 歌词加载成功: 3 行
+10:20:00: 动态背景: 更新至新的图片 https://p2.music.126.net/ucUMNBKXtVcbfWLoI_XgUg==/109951166449952053.jpg?param=300y300
+10:20:01: [后端解析] 动态背景提取成功
+10:20:45: API请求: https://music-api-hk.gdstudio.xyz/api.php?types=search&source=netease&name=%5Bobject%20PointerEvent%5D&count=30&pages=1&s=t2axm2sraxm0n8qre9zm
+10:20:45: 获取音频URL: https://music-api-hk.gdstudio.xyz/api.php?types=url&id=22294453&source=netease&br=320&s=v69tez63r5b8hhttzz4bic
+10:20:46: [直连API] url 请求成功
+10:20:46: 开始播放: Lisa sa @320
+10:20:46: 获取歌词URL: https://music-api-hk.gdstudio.xyz/api.php?types=lyric&id=22294453&source=netease&s=1tplcup1x7iwr9q533l0ko
+10:20:46: [直连API] search 请求成功
+10:20:46: API响应: [{"id":"1876043596","name":"[FREE]#Contradict","artist":["MisTree"],"album":"[FREE]#Contradict","pic_id":"109951166449952053","url_id":"1876043596","lyric_id":"1876043596","source":"netease","from":"m...
+10:20:46: [直连API] pic 请求成功
+10:20:46: 动态背景: 更新至新的图片 https://p2.music.126.net/JCRP3yNFothu6FopSS0plw==/109951173416095930.jpg?param=300y300
+10:20:46: [直连API] lyric 请求成功
+10:20:46: 解析歌词完成: 16 行
+10:20:46: 歌词加载成功: 16 行
+10:20:46: [直连API] url 请求成功
+10:20:46: 探索雷达无新增歌曲，关键词：[object PointerEvent]
+10:20:48: [后端解析] 动态背景提取成功
+10:21:02: API请求: https://music-api-hk.gdstudio.xyz/api.php?types=search&source=joox&name=%5Bobject%20PointerEvent%5D&count=30&pages=1&s=yypfg7euap96p1rbi4np9h
+10:21:02: 获取音频URL: https://music-api-hk.gdstudio.xyz/api.php?types=url&id=1876043596&source=netease&br=320&s=zre2gp89llmd08j9uhlkaf
+10:21:02: [直连API] url 请求成功
+10:21:02: 开始播放: [FREE]#Contradict @320
+10:21:02: [直连API] search 请求成功
+10:21:02: API响应: []...
+10:21:02: 探索雷达音源 joox 无搜索结果
+10:21:02: API请求: https://music-api-hk.gdstudio.xyz/api.php?types=search&source=kuwo&name=%5Bobject%20PointerEvent%5D&count=30&pages=1&s=blc46duu5os3mw4a07y8iv
+10:21:02: 获取歌词URL: https://music-api-hk.gdstudio.xyz/api.php?types=lyric&id=1876043596&source=netease&s=vn6n7in3gcsc7w8rk3t8
+10:21:03: [直连API] pic 请求成功
+10:21:03: 动态背景: 更新至新的图片 https://p2.music.126.net/ucUMNBKXtVcbfWLoI_XgUg==/109951166449952053.jpg?param=300y300
+10:21:03: [本地缓存] 动态背景提取成功
+10:21:03: [直连API] search 请求成功
+10:21:03: API响应: [{"id":"33411419","name":"private void Album_Loaded (object sender, RoutedEventArgs e) { Music.Play(\"Prelude\"); }","artist":["Tyler Schreiber"],"album":"America, Land That I Love","pic_id":"120/75/6...
+10:21:03: [直连API] lyric 请求成功
+10:21:03: 解析歌词完成: 3 行
+10:21:03: 歌词加载成功: 3 行
+10:21:04: [直连API] url 请求成功
+10:21:04: 探索雷达音源 kuwo 无法获取播放地址，尝试下一个
+10:21:04: API请求: https://music-api-hk.gdstudio.xyz/api.php?types=search&source=netease&name=%5Bobject%20PointerEvent%5D&count=30&pages=1&s=7v5k04olgx749p9etb0sx
+10:21:04: [直连API] search 请求成功
+10:21:04: API响应: [{"id":"1876043596","name":"[FREE]#Contradict","artist":["MisTree"],"album":"[FREE]#Contradict","pic_id":"109951166449952053","url_id":"1876043596","lyric_id":"1876043596","source":"netease","from":"m...
+10:21:05: [直连API] url 请求成功
+10:21:05: 探索雷达无新增歌曲，关键词：[object PointerEvent]

@@ -3596,7 +3596,7 @@ function setupInteractions() {
         });
     }
 
-    dom.loadOnlineBtn.addEventListener("click", exploreOnlineMusic);
+    dom.loadOnlineBtn.addEventListener("click", () => exploreOnlineMusic());
     if (dom.mobileExploreButton) {
         dom.mobileExploreButton.addEventListener("click", (event) => {
             event.preventDefault();
