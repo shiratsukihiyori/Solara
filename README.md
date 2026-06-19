@@ -1,13 +1,14 @@
 # Solara Hiyori Remix
 
-> 基于 [Akudamatata/Solara](https://github.com/akudamatata/Solara) 修改的个性化音乐播放器，部署于 Cloudflare Pages。
+> 基于 [Akudamatata/Solara](https://github.com/akudamatata/Solara) 修改的自定义的个性化音乐播放器，部署于 Cloudflare Pages。
 
 ## 特性
 
 - **跨源搜索** — 一键切换网易云/酷我等数据源，分页浏览并批量导入
-- **双通道 API** — 优先 JSONP 直连上游，失败自动降级到 Pages Function 代理转发，破除 WAF 封锁
-- **Dynamic Gradient** — 天空风格渐变背景跟随调色板动态变化，与壁纸互斥切换
-- **双重取色算法** — 后端 Palette Function 分析封面色调，失败时自动降级到前端 Canvas
+- **双通道 API** — 优先 JSONP 直连上游，失败降级到 Pages Function 代理转发
+- **心跳续播模式** — 列表末尾自动从雷达发现补充新曲目，无缝续播不循环
+- **自定义添加歌单机制** — 支持网易云分享链接解析、自定义后备歌单 ID、能播放分享的指定歌单
+- **背景去重优化** — 同首歌快速切换时跳过重复的背景刷新
 - **暗色模式** — 跟随系统或手动切换，无缝过渡
 - **竖屏移动端** — 专为手机优化的布局与手势
 - **动态歌词** — 逐行滚动高亮，手动滚动后 3 秒自动回位
@@ -21,7 +22,7 @@
 
 ```
 ┌──────────┐     ┌───────────┐
-│ Browser  │────▶│ 音乐平台APU│  ← JSONP 直连（优先，无跨域限制）
+│ Browser  │────▶│ 音乐平台API│  ← JSONP 直连（优先，无跨域限制）
 │ (script) │     └───────────┘
 │          │
 │          │     ┌──────────┐  ┌──────────┐
@@ -29,7 +30,7 @@
 └──────────┘     └──────────┘  └──────────┘
 ```
 
-- **JSONP 直连**：`<script>` 标签绕过跨域限制，请求从用户 IP 发出，上游 WAF 放行
+- **JSONP 直连**：`<script>` 标签绕过跨域限制，请求从用户 IP 发出！节省服务器网络压力
 - **代理转发**：JSONP 超时/失败后自动降级到 `functions/proxy.ts`，聊作后备
 
 ## 部署（Cloudflare Pages）
@@ -94,13 +95,13 @@ npm run deploy
 │   └── style.css         # 主题与公共变量
 ├── functions/
 │   ├── _middleware.ts    # 中间件（认证/国际化）
-│   ├── proxy.ts          # API 代理与缓存（降级通道）
-│   ├── palette.ts        # 封面取色
+│   ├── proxy.ts          # API 代理与缓存（降级通道，含网易云歌单直连兜底）
+│   ├── palette.ts        # 封面取色（供前端 Canvas 提取失败时降级）
 │   └── api/
 │       ├── login.ts      # 登录认证
 │       └── storage.ts    # D1 存储
 ├── js/
-│   ├── index.js          # 核心逻辑（含双通道 API / 渐变背景）
+│   ├── index.js          # 核心逻辑（含双通道 API / 渐变背景 / 雷达探索 / 心跳续播）
 │   └── mobile.js         # 移动端交互
 ├── index.html
 ├── login.html
