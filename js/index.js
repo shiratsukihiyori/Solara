@@ -85,6 +85,8 @@ const dom = {
     saveSettingsBtn: document.getElementById("saveSettingsBtn"),
     openSettingsBtn: document.getElementById("openSettingsBtn"),
     radarGenreList: document.getElementById("radarGenreList"),
+    fallbackPlaylistIds: document.getElementById("fallbackPlaylistIds"),
+    loadCustomPlaylistBtn: document.getElementById("loadCustomPlaylistBtn"),
     heartbeatModeCheckbox: document.getElementById("heartbeatMode"),
     logo: document.querySelector(".header h1"),
 };
@@ -953,6 +955,28 @@ const API = {
     getPicUrl: (song) => {
         const signature = API.generateSignature();
         return `${API.baseUrl}?types=pic&id=${song.pic_id}&source=${song.source || "netease"}&size=300&s=${signature}`;
+    },
+
+    searchPlaylist: async (keyword, limit = 30) => {
+        const signature = API.generateSignature();
+        const url = `${API.baseUrl}?types=search&source=netease&searchType=playlist&name=${encodeURIComponent(keyword)}&count=${limit}&s=${signature}`;
+        try {
+            const data = await API.fetchJson(url);
+            if (Array.isArray(data) && data.length > 0) {
+                const first = data[0];
+                return first.id || (first.playlist && first.playlist.id) || null;
+            }
+            if (data && data.playlists && Array.isArray(data.playlists) && data.playlists.length > 0) {
+                return data.playlists[0].id || null;
+            }
+            if (data && data.result && data.result.playlists && Array.isArray(data.result.playlists) && data.result.playlists.length > 0) {
+                return data.result.playlists[0].id;
+            }
+            return null;
+        } catch (e) {
+            debugLog(`搜索歌单失败: ${e.message}`);
+            return null;
+        }
     }
 };
 
@@ -5955,12 +5979,19 @@ function playNext() {
     }
 
     if (state.heartbeatMode && state.currentPlaylist === "playlist"
-        && playlist.length > 0 && !state._heartbeatLoading) {
+        && playlist.length > 0) {
         const remaining = playlist.length - state.currentTrackIndex - 1;
-        if (remaining <= 3 && state.lastRadarGenre) {
+        debugLog(`[心跳] 检查触发条件: remaining=${remaining}, _heartbeatLoading=${state._heartbeatLoading}, lastRadarGenre=${state.lastRadarGenre}`);
+        if (remaining <= 3 && !state._heartbeatLoading) {
+            if (!state.lastRadarGenre) {
+                state.lastRadarGenre = pickRandomExploreGenre();
+                debugLog(`[心跳] lastRadarGenre 为空，随机选取: ${state.lastRadarGenre}`);
+            }
             state._heartbeatLoading = true;
+            debugLog(`[心跳] 触发补充，genre=${state.lastRadarGenre}`);
             exploreOnlineMusic(state.lastRadarGenre).finally(() => {
                 state._heartbeatLoading = false;
+                debugLog(`[心跳] 补充完成`);
             });
         }
     }
@@ -6200,6 +6231,7 @@ async function exploreOnlineMusic(genre) {
 
         const sourcesToTry = shuffleArray(EXPLORE_RADAR_SOURCES);
         let lastError = null;
+        let anySourceHadResults = false;
 
         for (const source of sourcesToTry) {
             let results;
@@ -6252,13 +6284,9 @@ async function exploreOnlineMusic(genre) {
             }
 
             if (appendedSongs.length === 0) {
-                state._radarPage = 1;
-                if (genre) {
-                    return;
-                }
-                showNotification("探索雷达：本次未找到新的歌曲，当前列表已包含这些曲目", "info");
-                debugLog(`探索雷达无新增歌曲，关键词：${randomGenre}`);
-                return;
+                anySourceHadResults = true;
+                debugLog(`探索雷达音源 ${source} 结果已全部在列表中，尝试下一个音源`);
+                continue;
             }
 
             state.playlistSongs = existingSongs.concat(appendedSongs);
@@ -6285,51 +6313,81 @@ async function exploreOnlineMusic(genre) {
 
         state._radarPage = 1;
 
+        // 心动模式：所有音源的结果都已重复，重置页面继续搜
+        if (genre && anySourceHadResults) {
+            debugLog(`探索雷达心跳模式：当前 "${genre}" 所有结果均在列表中`);
+        }
+
+        // 随机探索：所有结果重复时友好提示
+        if (!genre && anySourceHadResults) {
+            showNotification("探索雷达：本次未找到新的歌曲，当前列表已包含这些曲目", "info");
+            debugLog(`探索雷达无新增歌曲，关键词：${randomGenre}`);
+            return;
+        }
+
+        // 兜底：自定义歌单 → 动态搜歌单 → 默认歌单
+        async function tryPlaylistFallback(playlistIds) {
+            for (let i = 0; i < playlistIds.length; i++) {
+                const idx = (state._radarFallbackIndex + i) % playlistIds.length;
+                const playlistId = playlistIds[idx];
+                debugLog(`探索雷达尝试歌单兜底: ${playlistId}`);
+                const tracks = await API.getRadarPlaylist(playlistId, { limit: 30 });
+                if (!Array.isArray(tracks) || tracks.length === 0) continue;
+                const existingKeys = new Set((state.playlistSongs || [])
+                    .map(s => getSongKey(s))
+                    .filter(k => typeof k === "string" && k.length > 0));
+                const appendedSongs = [];
+                for (const track of tracks) {
+                    const key = getSongKey(track);
+                    if (key && existingKeys.has(key)) continue;
+                    appendedSongs.push(track);
+                    if (key) existingKeys.add(key);
+                }
+                if (appendedSongs.length > 0) {
+                    state._radarFallbackIndex = (idx + 1) % playlistIds.length;
+                    state.playlistSongs = (state.playlistSongs || []).concat(appendedSongs);
+                    state.onlineSongs = state.playlistSongs.slice();
+                    state.currentPlaylist = "playlist";
+                    state.currentList = "playlist";
+                    renderPlaylist();
+                    updatePlaylistHighlight();
+                    showNotification(`探索雷达：歌单补充${appendedSongs.length}首新歌`, "success");
+                    debugLog(`探索雷达歌单兜底成功，歌单ID：${playlistId}，新增歌曲数：${appendedSongs.length}`);
+                    const shouldAutoplay = state.playlistSongs.length === appendedSongs.length;
+                    if (shouldAutoplay) {
+                        await playPlaylistSong(0);
+                    } else {
+                        savePlayerState();
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+
         if (!state._radarFallbacking && genre) {
             state._radarFallbacking = true;
             try {
-                for (let i = 0; i < RADAR_FALLBACK_PLAYLISTS.length; i++) {
-                    const idx = (state._radarFallbackIndex + i) % RADAR_FALLBACK_PLAYLISTS.length;
-                    const playlistId = RADAR_FALLBACK_PLAYLISTS[idx];
-                    debugLog(`探索雷达关键词搜尽，尝试歌单兜底: ${playlistId}`);
-
-                    const tracks = await API.getRadarPlaylist(playlistId, { limit: 30 });
-                    if (!Array.isArray(tracks) || tracks.length === 0) continue;
-
-                    const existingKeys = new Set((state.playlistSongs || [])
-                        .map(s => getSongKey(s))
-                        .filter(k => typeof k === "string" && k.length > 0));
-
-                    const appendedSongs = [];
-                    for (const track of tracks) {
-                        const key = getSongKey(track);
-                        if (key && existingKeys.has(key)) continue;
-                        appendedSongs.push(track);
-                        if (key) existingKeys.add(key);
-                    }
-
-                    if (appendedSongs.length > 0) {
-                        state._radarFallbackIndex = (idx + 1) % RADAR_FALLBACK_PLAYLISTS.length;
-                        state.playlistSongs = (state.playlistSongs || []).concat(appendedSongs);
-                        state.onlineSongs = state.playlistSongs.slice();
-                        state.currentPlaylist = "playlist";
-                        state.currentList = "playlist";
-
-                        renderPlaylist();
-                        updatePlaylistHighlight();
-
-                        showNotification(`探索雷达：歌单补充${appendedSongs.length}首新歌`, "success");
-                        debugLog(`探索雷达歌单兜底成功，歌单ID：${playlistId}，新增歌曲数：${appendedSongs.length}`);
-
-                        const shouldAutoplay = state.playlistSongs.length === appendedSongs.length;
-                        if (shouldAutoplay) {
-                            await playPlaylistSong(0);
-                        } else {
-                            savePlayerState();
-                        }
-                        state._radarFallbacking = false;
+                // 1. 自定义歌单
+                const customIds = state.radarSettings && state.radarSettings.fallbackPlaylistIds;
+                if (Array.isArray(customIds) && customIds.length > 0) {
+                    if (await tryPlaylistFallback(customIds)) {
                         return;
                     }
+                }
+
+                // 2. 动态搜索歌单
+                const dynamicId = await API.searchPlaylist(randomGenre);
+                if (dynamicId) {
+                    debugLog(`探索雷达动态搜到歌单: ${dynamicId}`);
+                    if (await tryPlaylistFallback([dynamicId])) {
+                        return;
+                    }
+                }
+
+                // 3. 默认歌单
+                if (await tryPlaylistFallback(RADAR_FALLBACK_PLAYLISTS)) {
+                    return;
                 }
             } catch (fbError) {
                 debugLog(`探索雷达歌单兜底失败: ${fbError.message}`);
@@ -6674,6 +6732,11 @@ function initSettings() {
         });
     }
 
+    // 自定义歌单直接播放
+    if (dom.loadCustomPlaylistBtn) {
+        dom.loadCustomPlaylistBtn.addEventListener("click", loadCustomPlaylist);
+    }
+
     // 加载设置
     loadSettings();
 }
@@ -6713,10 +6776,15 @@ async function saveSettings() {
     }
 
     const heartbeatMode = dom.heartbeatModeCheckbox ? dom.heartbeatModeCheckbox.checked : false;
+    const fallbackIdsRaw = dom.fallbackPlaylistIds ? dom.fallbackPlaylistIds.value.trim() : "";
+    const fallbackIds = fallbackIdsRaw
+        ? fallbackIdsRaw.split(/\n|,/).map(s => s.trim()).filter(id => /^\d+$/.test(id))
+        : [];
 
     state.radarSettings = {
         genres: selectedGenres,
-        heartbeatMode: heartbeatMode
+        heartbeatMode: heartbeatMode,
+        fallbackPlaylistIds: fallbackIds.length > 0 ? fallbackIds : undefined
     };
     state.heartbeatMode = heartbeatMode;
 
@@ -6732,6 +6800,60 @@ async function saveSettings() {
 
     showNotification("设置已保存", "success");
     closeSettingsModal();
+}
+
+// 自定义歌单直接播放
+async function loadCustomPlaylist() {
+    const raw = dom.fallbackPlaylistIds ? dom.fallbackPlaylistIds.value.trim() : "";
+    const ids = raw.split(/\n|,/).map(s => s.trim()).filter(id => /^\d+$/.test(id));
+    if (ids.length === 0) {
+        showNotification("请先输入歌单 ID", "warning");
+        return;
+    }
+    const btn = dom.loadCustomPlaylistBtn;
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = "加载中...";
+    }
+    closeSettingsModal();
+    try {
+        let allTracks = [];
+        const existingKeys = new Set((state.playlistSongs || [])
+            .map(s => getSongKey(s))
+            .filter(k => typeof k === "string" && k.length > 0));
+        for (const id of ids) {
+            const tracks = await API.getRadarPlaylist(id, { limit: 50 });
+            if (!Array.isArray(tracks)) continue;
+            for (const track of tracks) {
+                const key = getSongKey(track);
+                if (key && existingKeys.has(key)) continue;
+                allTracks.push(track);
+                if (key) existingKeys.add(key);
+            }
+        }
+        if (allTracks.length === 0) {
+            showNotification("歌单中无新歌曲", "info");
+            return;
+        }
+        const startIndex = state.playlistSongs.length;
+        state.playlistSongs = (state.playlistSongs || []).concat(allTracks);
+        state.onlineSongs = state.playlistSongs.slice();
+        state.currentPlaylist = "playlist";
+        state.currentList = "playlist";
+        renderPlaylist();
+        updatePlaylistHighlight();
+        showNotification(`已加载歌单，新增${allTracks.length}首`, "success");
+        debugLog(`[直接播放] 加载 ${allTracks.length} 首新歌，总 ${state.playlistSongs.length} 首，从索引 ${startIndex} 开始播放`);
+        await playPlaylistSong(startIndex);
+    } catch (e) {
+        console.error("加载自定义歌单失败:", e);
+        showNotification("加载歌单失败: " + e.message, "error");
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "直接播放";
+        }
+    }
 }
 
 async function loadSettings() {
@@ -6761,6 +6883,11 @@ function applySettingsToUI() {
     if (dom.heartbeatModeCheckbox && typeof state.radarSettings.heartbeatMode === "boolean") {
         dom.heartbeatModeCheckbox.checked = state.radarSettings.heartbeatMode;
         state.heartbeatMode = state.radarSettings.heartbeatMode;
+    }
+
+    if (dom.fallbackPlaylistIds) {
+        const ids = state.radarSettings.fallbackPlaylistIds;
+        dom.fallbackPlaylistIds.value = Array.isArray(ids) && ids.length > 0 ? ids.join("\n") : "";
     }
 }
 

@@ -559,6 +559,12 @@
                 </div>
                 <p class="settings-hint">开启后，探索雷达将在歌曲即将播放完毕时自动补充同风格歌曲，不间断推送。</p>
             </section>
+            <section class="settings-section">
+                <h3>自定义预设歌单</h3>
+                <p class="settings-hint">当搜索不到结果时，依次尝试以下网易云歌单 ID 兜底。每行一个，留空使用默认歌单。</p>
+                <textarea id="fallbackPlaylistIds" class="settings-textarea" rows="4" placeholder="每行一个歌单ID，例如：&#10;3778678"></textarea>
+                <button id="loadCustomPlaylistBtn" class="load-custom-playlist-btn">直接播放</button>
+            </section>
         </div>
         <div class="modal-footer">
             <button id="saveSettingsBtn" class="save-settings-btn">保存设置</button>

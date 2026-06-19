@@ -2439,6 +2439,54 @@ input[type="range"] {
     margin-bottom: 20px;
 }
 
+.settings-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1.5px solid var(--border-color);
+    background: var(--component-bg);
+    color: var(--text-color);
+    font-size: 0.9rem;
+    font-family: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+    transition: border-color 0.25s ease;
+}
+.settings-textarea:focus {
+    outline: none;
+    border-color: #1abc9c;
+}
+.settings-textarea::placeholder {
+    color: var(--text-secondary-color);
+    opacity: 0.6;
+}
+
+.load-custom-playlist-btn {
+    display: block;
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 12px;
+    background: #1abc9c;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.15s ease;
+}
+.load-custom-playlist-btn:hover {
+    background: #16a085;
+}
+.load-custom-playlist-btn:active {
+    transform: scale(0.97);
+}
+.load-custom-playlist-btn:disabled {
+    background: var(--text-secondary-color);
+    cursor: not-allowed;
+    transform: none;
+}
+
 .genre-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
