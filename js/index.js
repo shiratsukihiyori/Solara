@@ -795,7 +795,7 @@ const savedCurrentPlaylist = (() => {
 // API配置 - 使用 JSONP 直接从浏览器请求上游 API，绕过 Workers IP 被 WAF 拦截的问题
 const API = {
     get baseUrl() {
-        return "https://music-api-hk.gdstudio.xyz/api.php";
+        return "https://music-api.gdstudio.xyz/api.php";
     },
 
     generateSignature: () => {
