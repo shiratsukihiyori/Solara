@@ -1,6 +1,6 @@
 const API_BASE_URL = "https://music-api-hk.gdstudio.xyz/api.php";
 const KUWO_HOST_PATTERN = /(^|\.)kuwo\.cn$/i;
-const BROWSER_UA = "Mozilla/5.0 (compatible; ChatGPTUser/1.0; +https://openai.com/chatgptuser)";
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 const SAFE_RESPONSE_HEADERS = ["content-type", "cache-control", "accept-ranges", "content-length", "content-range", "etag", "last-modified", "expires"];
 const NETEASE_API_BASE = "https://music.163.com/api";
 
