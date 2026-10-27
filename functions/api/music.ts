@@ -172,132 +172,147 @@ function toLrc(lrclist: any[]): string {
     .join("\n");
 }
 
-// ---------- Spotify ----------
-// 鉴权链：① Client Credentials（env 配置，正规可靠）→ ② Web Player 匿名 token（官方已封，仅兜底）
-let spotifyTokenCache: { token: string; expiresAt: number } = { token: "", expiresAt: 0 };
+// ---------- YouTube Music ----------
+const YTM_CLIENT_VERSION = "1.20241127.01.00";
 
-function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 8000): Promise<Response> {
+function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 12000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
   return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-async function getClientCredentialsToken(env: any): Promise<string | null> {
-  const clientId = env?.SPOTIFY_CLIENT_ID;
-  const clientSecret = env?.SPOTIFY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
+function collectMusicRenderers(node: any, out: any[]): void {
+  if (!node) return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectMusicRenderers(item, out);
+    return;
+  }
+  if (typeof node !== "object") return;
+  if (node.musicResponsiveListItemRenderer) out.push(node.musicResponsiveListItemRenderer);
+  for (const key in node) collectMusicRenderers(node[key], out);
+}
+
+function parseYouTubeItem(it: any): any | null {
   try {
-    const res = await fetchWithTimeout(
-      "https://accounts.spotify.com/api/token",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
-        },
-        body: "grant_type=client_credentials",
-      },
-      8000
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const token = data?.access_token;
-    if (!token) return null;
-    spotifyTokenCache = {
-      token,
-      expiresAt: Date.now() + (Number(data?.expires_in || 3600) - 60) * 1000,
+    const columns = it.flexColumns || [];
+    const titleRuns = columns[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+    const name = String(titleRuns[0]?.text || "").trim();
+    const subRuns = columns[1]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs || [];
+    const subText = subRuns
+      .map((r: any) => String(r.text || "").trim())
+      .filter(Boolean)
+      .join(" • ");
+    let parts = subText.split("•").map((s: string) => s.trim()).filter(Boolean);
+
+    let duration = "";
+    const fixedText =
+      it.fixedColumns?.[0]?.musicResponsiveListItemFixedColumnRenderer?.text?.runs?.[0]?.text || "";
+    if (/^\d{1,2}:\d{2}$/.test(fixedText)) duration = fixedText;
+    if (parts.length && /^\d{1,2}:\d{2}$/.test(parts[parts.length - 1])) {
+      duration = duration || String(parts.pop());
+    }
+    const kind = String(parts[0] || "").toLowerCase();
+    if (["song", "video", "歌曲", "视频"].includes(kind)) parts = parts.slice(1);
+    // 过滤观看数、纯分隔符等杂质
+    parts = parts
+      .filter((p: string) => !/次观看|次播放|观看|views?/i.test(p))
+      .filter((p: string) => !/^[、，,&/·・和\s]+$/.test(p));
+    // 过滤艺人卡片 / 播放列表 / 专辑卡片等非歌曲条目
+    if (/subscribers|订阅者|播放列表|playlist|album|专辑/i.test(subText) && !duration) return null;
+
+    let videoId = "";
+    try {
+      videoId =
+        it.overlay.musicItemThumbnailOverlayRenderer.content.musicPlayButtonRenderer
+          .playNavigationEndpoint.watchEndpoint.videoId || "";
+    } catch {}
+    if (!videoId) {
+      for (const run of titleRuns) {
+        const v = run?.navigationEndpoint?.watchEndpoint?.videoId;
+        if (v) {
+          videoId = v;
+          break;
+        }
+      }
+    }
+    if (!videoId) {
+      try {
+        videoId = it.navigationEndpoint.watchEndpoint.videoId || "";
+      } catch {}
+    }
+    if (!videoId || !name) return null;
+
+    const thumbnails = it.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails || [];
+    const pic = thumbnails.length ? String(thumbnails[thumbnails.length - 1].url || "") : "";
+
+    return {
+      id: videoId,
+      name,
+      artist: parts.length ? parts : ["YouTube Music"],
+      album: "",
+      duration,
+      pic_id: pic || `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      url_id: videoId,
+      lyric_id: videoId,
+      source: "youtube",
     };
-    return token;
   } catch {
     return null;
   }
 }
 
-async function getSpotifyToken(env: any): Promise<string | null> {
-  if (spotifyTokenCache.token && Date.now() < spotifyTokenCache.expiresAt) return spotifyTokenCache.token;
+async function youtubeSearch(q: string, count: number): Promise<any[]> {
+  const contexts = [
+    { host: "https://music.youtube.com", clientName: "WEB_REMIX" },
+    { host: "https://www.youtube.com", clientName: "WEB_REMIX" },
+  ];
 
-  // ① 正式渠道：Client Credentials
-  const ccToken = await getClientCredentialsToken(env);
-  if (ccToken) return ccToken;
-
-  // ② 兜底：Web Player 匿名 token（Spotify 已封锁此接口，通常返回 403）
-  try {
-    const res = await fetchWithTimeout(
-      "https://open.spotify.com/get_access_token?reason=transport&productType=web_player",
-      {
-        headers: {
-          "User-Agent": BROWSER_UA,
-          Accept: "application/json",
-          Referer: "https://open.spotify.com/",
-        },
-      },
-      8000
-    );
-    if (!res.ok) return null;
-    const data = await res.json();
-    const token = data?.accessToken;
-    if (!token) return null;
-    const expiresAt =
-      Number(data?.accessTokenExpirationTimestampMs) - 60_000 || Date.now() + 30 * 60_000;
-    spotifyTokenCache = { token, expiresAt };
-    return token;
-  } catch {
-    return null;
+  for (const ctx of contexts) {
+    try {
+      const res = await fetchWithTimeout(
+        `${ctx.host}/youtubei/v1/search?prettyPrint=false`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "user-agent": BROWSER_UA,
+            "x-youtube-client-name": ctx.clientName === "WEB_REMIX" ? "67" : "1",
+            "x-youtube-client-version": YTM_CLIENT_VERSION,
+            origin: ctx.host,
+            referer: `${ctx.host}/`,
+          },
+          body: JSON.stringify({
+            context: {
+              client: {
+                clientName: ctx.clientName,
+                clientVersion: YTM_CLIENT_VERSION,
+                hl: "zh-CN",
+                gl: "JP",
+              },
+            },
+            query: q,
+          }),
+        }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const renderers: any[] = [];
+      collectMusicRenderers(data, renderers);
+      const seen = new Set<string>();
+      const results: any[] = [];
+      for (const it of renderers) {
+        const song = parseYouTubeItem(it);
+        if (!song || seen.has(song.id)) continue;
+        seen.add(song.id);
+        results.push(song);
+      }
+      if (results.length > 0) return results.slice(0, count);
+    } catch {
+      // 尝试下一个入口
+    }
   }
+  return [];
 }
-
-async function spotifyApi(env: any, path: string): Promise<any> {
-  const token = await getSpotifyToken(env);
-  if (!token) throw new Error("Spotify 鉴权失败：请配置 SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET");
-  const res = await fetch(`https://api.spotify.com/v1${path}`, {
-    headers: { Authorization: `Bearer ${token}`, "User-Agent": BROWSER_UA },
-  });
-  if (!res.ok) throw new Error(`Spotify API ${res.status}`);
-  return res.json();
-}
-
-// 试听兜底：老接口被封时，从官方 embed 页提取 30 秒试听地址
-async function spotifyEmbedPreview(trackId: string): Promise<string | null> {
-  try {
-    const res = await fetchWithTimeout(
-      `https://open.spotify.com/embed/track/${encodeURIComponent(trackId)}`,
-      { headers: { "User-Agent": BROWSER_UA } },
-      8000
-    );
-    if (!res.ok) return null;
-    const html = await res.text();
-    const quoted = html.match(/"audioPreview":\{"url":"([^"]+)"/);
-    if (quoted) return quoted[1];
-    const bare = html.match(/mp3-preview\/([a-zA-Z0-9]+)/);
-    if (bare) return `https://p.scdn.co/mp3-preview/${bare[1]}`;
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-async function spotifySearch(env: any, q: string, page: number, count: number): Promise<any[]> {
-  const offset = Math.max(0, (page || 1) - 1) * count;
-  const data = await spotifyApi(
-    env,
-    `/search?q=${encodeURIComponent(q)}&type=track&limit=${count}&offset=${offset}`
-  );
-  const items = Array.isArray(data?.tracks?.items) ? data.tracks.items : [];
-  return items.map((track: any) => ({
-    id: track.id,
-    name: track.name,
-    artist: Array.isArray(track.artists) ? track.artists.map((a: any) => a.name) : [],
-    album: track?.album?.name || "",
-    // pic_id 直接放封面 URL，前端走 type=img 中转
-    pic_id: track?.album?.images?.[0]?.url || "",
-    url_id: track.id,
-    lyric_id: track.id,
-    source: "spotify",
-    preview: true,
-    duration: 30,
-  }));
-}
-
 // ---------- 音频流中转（支持 Range 拖动） ----------
 async function streamProxy(target: string, request: Request): Promise<Response> {
   const headers: Record<string, string> = { "User-Agent": BROWSER_UA };
@@ -350,8 +365,10 @@ export async function onRequest(context: any): Promise<Response> {
     if (type === "img") {
       const pic = url.searchParams.get("u") || "";
       if (!/^https?:\/\//i.test(pic)) return jsonResponse({ error: "bad img" }, 400);
+      let referer = "https://www.kuwo.cn/";
+      try { referer = new URL(pic).origin + "/"; } catch {}
       const res = await fetch(pic, {
-        headers: { "User-Agent": BROWSER_UA, Referer: "https://open.spotify.com/" },
+        headers: { "User-Agent": BROWSER_UA, Referer: referer },
       });
       const headers = new Headers();
       headers.set("content-type", res.headers.get("content-type") || "image/jpeg");
@@ -360,7 +377,7 @@ export async function onRequest(context: any): Promise<Response> {
       return new Response(res.body, { status: res.status, headers });
     }
 
-    if (source !== "kuwo" && source !== "spotify") {
+    if (source !== "kuwo" && source !== "youtube") {
       return jsonResponse({ error: "unsupported source" }, 400);
     }
 
@@ -368,7 +385,7 @@ export async function onRequest(context: any): Promise<Response> {
       const q = url.searchParams.get("q") || "";
       if (!q.trim()) return jsonResponse({ error: "missing q" }, 400);
       const results =
-        source === "kuwo" ? await kuwoSearch(q, page, count) : await spotifySearch(env, q, page, count);
+        source === "kuwo" ? await kuwoSearch(q, page, count) : await youtubeSearch(q, count);
       return jsonResponse(results);
     }
 
@@ -379,36 +396,17 @@ export async function onRequest(context: any): Promise<Response> {
           url: `/api/music?type=stream&source=kuwo&id=${encodeURIComponent(id)}&br=${br}`,
         });
       }
-      let preview: string | null = null;
-      try {
-        const track = await spotifyApi(env, `/tracks/${encodeURIComponent(id)}`);
-        preview = track?.preview_url || null;
-      } catch {
-        // 未配置凭据时走 embed 兜底
-      }
-      if (!preview) preview = await spotifyEmbedPreview(id);
-      if (!preview) return jsonResponse({ error: "该曲目暂无试听片段" }, 404);
-      return jsonResponse({
-        url: `/api/music?type=stream&source=spotify&id=${encodeURIComponent(id)}`,
-        preview: true,
-        duration: 30,
-      });
+      // YouTube Music：整首播放走官方 IFrame 播放器，前端用 yt: 前缀切换播放后端
+      return jsonResponse({ url: `yt:${id}`, playable: "iframe" });
     }
 
     if (type === "stream") {
       if (!id) return jsonResponse({ error: "missing id" }, 400);
-      let target: string | null = null;
-      if (source === "kuwo") {
-        target = await kuwoResolveUrl(id, br);
-      } else {
-        try {
-          const track = await spotifyApi(env, `/tracks/${encodeURIComponent(id)}`);
-          target = track?.preview_url || null;
-        } catch {
-          target = null;
-        }
-        if (!target) target = await spotifyEmbedPreview(id);
+      if (source === "youtube") {
+        return jsonResponse({ error: "youtube 整曲由官方播放器承载，无直链音频" }, 400);
       }
+      let target: string | null = null;
+      target = await kuwoResolveUrl(id, br);
       if (!target) return jsonResponse({ error: "no stream url" }, 404);
       return await streamProxy(target, request);
     }
@@ -418,7 +416,7 @@ export async function onRequest(context: any): Promise<Response> {
         const data = await kuwoSongInfo(id);
         return jsonResponse({ lyric: toLrc(data?.data?.lrclist || []) });
       }
-      // Spotify 歌词非公开接口，返回空（前端显示“暂无歌词”）
+      // YouTube Music 歌词需额外签名接口，先返回空（前端显示“暂无歌词”）
       return jsonResponse({ lyric: "" });
     }
 
@@ -435,25 +433,19 @@ export async function onRequest(context: any): Promise<Response> {
         if (!pic) return jsonResponse({ url: "" });
         return jsonResponse({ url: `/api/music?type=img&u=${encodeURIComponent(pic)}` });
       }
-      // spotify：id 传 track id 或直接传图片 URL
-      let picUrl = id;
-      if (id && !/^https?:\/\//i.test(id)) {
-        try {
-          const track = await spotifyApi(env, `/tracks/${encodeURIComponent(id)}`);
-          picUrl = track?.album?.images?.[0]?.url || "";
-        } catch {
-          picUrl = "";
-        }
-      }
-      if (!picUrl) return jsonResponse({ url: "" });
-      return jsonResponse({ url: `/api/music?type=img&u=${encodeURIComponent(picUrl)}` });
+      // youtube：id 可直接传缩略图 URL 或 videoId
+      if (/^https?:\/\//i.test(id)) return jsonResponse({ url: id });
+      if (!id) return jsonResponse({ url: "" });
+      return jsonResponse({ url: `https://i.ytimg.com/vi/${encodeURIComponent(id)}/mqdefault.jpg` });
     }
 
     if (type === "img") {
       const pic = url.searchParams.get("u") || "";
       if (!/^https?:\/\//i.test(pic)) return jsonResponse({ error: "bad img" }, 400);
+      let referer = "https://www.kuwo.cn/";
+      try { referer = new URL(pic).origin + "/"; } catch {}
       const res = await fetch(pic, {
-        headers: { "User-Agent": BROWSER_UA, Referer: "https://open.spotify.com/" },
+        headers: { "User-Agent": BROWSER_UA, Referer: referer },
       });
       const headers = new Headers();
       headers.set("content-type", res.headers.get("content-type") || "image/jpeg");

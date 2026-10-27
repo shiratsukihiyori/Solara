@@ -91,6 +91,218 @@ const dom = {
     logo: document.querySelector(".header h1"),
 };
 
+// ===== 媒体门面：普通源走 <audio>，YouTube Music 走官方 IFrame 播放器 =====
+const _realAudio = dom.audioPlayer;
+const _ytBridge = {
+    mode: false,
+    apiPromise: null,
+    player: null,
+    ready: false,
+    videoId: null,
+    ended: false,
+    volume: 0.8,
+    lastState: -1,
+    pollTimer: null,
+};
+const _mediaListeners = new Map();
+
+function _emitMedia(type) {
+    const set = _mediaListeners.get(type);
+    if (!set) return;
+    for (const fn of Array.from(set)) {
+        try { fn({ type, target: dom.audioPlayer }); } catch (error) { console.error(error); }
+    }
+}
+
+['loadedmetadata', 'durationchange', 'play', 'pause', 'timeupdate', 'seeking', 'seeked', 'ended', 'error', 'ratechange', 'waiting', 'canplay'].forEach((type) => {
+    _realAudio.addEventListener(type, () => { if (!_ytBridge.mode) _emitMedia(type); });
+});
+
+function _ensureYouTubeContainer() {
+    let container = document.getElementById('youtubeBridge');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'youtubeBridge';
+        container.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:320px;height:180px;opacity:0;pointer-events:none;';
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+function _loadYouTubeApi() {
+    if (window.YT && window.YT.Player) return Promise.resolve(window.YT);
+    if (_ytBridge.apiPromise) return _ytBridge.apiPromise;
+    _ytBridge.apiPromise = new Promise((resolve, reject) => {
+        const previous = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = function () {
+            if (typeof previous === 'function') previous();
+            resolve(window.YT);
+        };
+        const script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        script.onerror = () => reject(new Error('YouTube 播放器脚本加载失败'));
+        document.head.appendChild(script);
+    });
+    return _ytBridge.apiPromise;
+}
+
+function _startYouTubePoll() {
+    if (_ytBridge.pollTimer) return;
+    _ytBridge.pollTimer = window.setInterval(() => {
+        if (!_ytBridge.mode || !_ytBridge.player || !_ytBridge.ready) return;
+        let playerState = -1;
+        try { playerState = _ytBridge.player.getPlayerState(); } catch (_) {}
+        if (playerState === 1 && _ytBridge.lastState !== 1) _emitMedia('play');
+        if (playerState === 2 && _ytBridge.lastState === 1) _emitMedia('pause');
+        if (playerState === 0 && !_ytBridge.ended) {
+            _ytBridge.ended = true;
+            _emitMedia('pause');
+            _emitMedia('ended');
+        }
+        if (playerState !== _ytBridge.lastState) {
+            _ytBridge.lastState = playerState;
+            _emitMedia('durationchange');
+        }
+        if (playerState === 1) _emitMedia('timeupdate');
+    }, 400);
+}
+
+function _stopYouTubePoll() {
+    if (_ytBridge.pollTimer) {
+        window.clearInterval(_ytBridge.pollTimer);
+        _ytBridge.pollTimer = null;
+    }
+}
+
+async function _loadYouTubeVideo(videoId) {
+    _ytBridge.mode = true;
+    _ytBridge.videoId = videoId;
+    _ytBridge.ended = false;
+    _ytBridge.lastState = -1;
+    try { _realAudio.pause(); } catch (_) {}
+    try { _realAudio.removeAttribute('src'); } catch (_) {}
+
+    const YT = await _loadYouTubeApi();
+
+    if (_ytBridge.player && _ytBridge.ready) {
+        try {
+            _ytBridge.player.loadVideoById({ videoId });
+            _ytBridge.player.setVolume(Math.round(_ytBridge.volume * 100));
+        } catch (_) {}
+        _startYouTubePoll();
+        window.setTimeout(() => { _emitMedia('loadedmetadata'); _emitMedia('durationchange'); }, 300);
+        return;
+    }
+
+    const container = _ensureYouTubeContainer();
+    await new Promise((resolve) => {
+        new YT.Player(container, {
+            videoId,
+            width: 320,
+            height: 180,
+            playerVars: {
+                autoplay: 1,
+                controls: 0,
+                disablekb: 1,
+                fs: 0,
+                playsinline: 1,
+                rel: 0,
+                origin: window.location.origin,
+            },
+            events: {
+                onReady: (event) => {
+                    _ytBridge.player = event.target;
+                    _ytBridge.ready = true;
+                    try { _ytBridge.player.setVolume(Math.round(_ytBridge.volume * 100)); } catch (_) {}
+                    _startYouTubePoll();
+                    window.setTimeout(() => { _emitMedia('loadedmetadata'); _emitMedia('durationchange'); }, 100);
+                    resolve();
+                },
+                onError: () => {
+                    window.setTimeout(() => _emitMedia('error'), 0);
+                },
+            },
+        });
+        window.setTimeout(resolve, 15000);
+    });
+}
+
+function _stopYouTubePlayback() {
+    _stopYouTubePoll();
+    if (_ytBridge.player && _ytBridge.ready) {
+        try { _ytBridge.player.stopVideo(); } catch (_) {}
+    }
+    _ytBridge.mode = false;
+    _ytBridge.videoId = null;
+    _ytBridge.ended = false;
+}
+
+const _mediaFacade = {
+    get src() { return _ytBridge.mode ? `yt:${_ytBridge.videoId || ''}` : _realAudio.src; },
+    set src(value) {
+        const text = typeof value === 'string' ? value : '';
+        if (text.startsWith('yt:')) {
+            _loadYouTubeVideo(text.slice(3)).catch((error) => {
+                console.error('YouTube 播放器初始化失败', error);
+                window.setTimeout(() => _emitMedia('error'), 0);
+            });
+            return;
+        }
+        if (_ytBridge.mode) _stopYouTubePlayback();
+        _realAudio.src = text;
+    },
+    get readyState() { return _ytBridge.mode ? (_ytBridge.ready && _ytBridge.videoId ? 1 : 0) : _realAudio.readyState; },
+    get paused() {
+        if (!_ytBridge.mode) return _realAudio.paused;
+        if (!_ytBridge.player || !_ytBridge.ready) return true;
+        try { return _ytBridge.player.getPlayerState() !== 1; } catch (_) { return true; }
+    },
+    get ended() { return _ytBridge.mode ? _ytBridge.ended : _realAudio.ended; },
+    get currentTime() {
+        if (!_ytBridge.mode) return _realAudio.currentTime;
+        try { return _ytBridge.player && _ytBridge.ready ? (_ytBridge.player.getCurrentTime() || 0) : 0; } catch (_) { return 0; }
+    },
+    set currentTime(value) {
+        const time = Number(value) || 0;
+        if (!_ytBridge.mode) { _realAudio.currentTime = time; return; }
+        try { if (_ytBridge.player && _ytBridge.ready) _ytBridge.player.seekTo(time, true); } catch (_) {}
+    },
+    get duration() {
+        if (!_ytBridge.mode) return _realAudio.duration;
+        try { return _ytBridge.player && _ytBridge.ready ? (_ytBridge.player.getDuration() || 0) : 0; } catch (_) { return 0; }
+    },
+    get volume() { return _ytBridge.mode ? _ytBridge.volume : _realAudio.volume; },
+    set volume(value) {
+        const level = Math.min(Math.max(Number(value) || 0, 0), 1);
+        _ytBridge.volume = level;
+        if (!_ytBridge.mode) { _realAudio.volume = level; return; }
+        try { if (_ytBridge.player && _ytBridge.ready) _ytBridge.player.setVolume(Math.round(level * 100)); } catch (_) {}
+    },
+    get muted() { return _ytBridge.mode ? false : _realAudio.muted; },
+    set muted(value) { if (!_ytBridge.mode) _realAudio.muted = !!value; },
+    load() { if (!_ytBridge.mode) _realAudio.load(); },
+    play() {
+        if (!_ytBridge.mode) return _realAudio.play();
+        try { if (_ytBridge.player && _ytBridge.ready) _ytBridge.player.playVideo(); } catch (_) {}
+        return Promise.resolve();
+    },
+    pause() {
+        if (!_ytBridge.mode) { _realAudio.pause(); return; }
+        try { if (_ytBridge.player && _ytBridge.ready) _ytBridge.player.pauseVideo(); } catch (_) {}
+    },
+    addEventListener(type, handler) {
+        if (!_mediaListeners.has(type)) _mediaListeners.set(type, new Set());
+        _mediaListeners.get(type).add(handler);
+    },
+    removeEventListener(type, handler) {
+        const set = _mediaListeners.get(type);
+        if (set) set.delete(handler);
+    },
+};
+
+dom.audioPlayer = _mediaFacade;
+
+
 window.SolaraHiyoriRemixDom = dom;
 
 const RADAR_FALLBACK_PLAYLISTS = [
@@ -674,7 +886,7 @@ const SOURCE_OPTIONS = [
     { value: "netease", label: "网易云音乐" },
     { value: "kuwo", label: "酷我音乐" },
     { value: "bilibili", label: "哔哩哔哩" },
-    { value: "spotify", label: "Spotify" }
+    { value: "youtube", label: "YouTube Music" }
 ];
 
 function normalizeSource(value) {
@@ -882,7 +1094,7 @@ const API = {
 
     search: async (keyword, source = "netease", count = 20, page = 1) => {
         // 酷我 / Spotify 走同源适配层
-        if (source === "kuwo" || source === "spotify") {
+        if (source === "kuwo" || source === "youtube") {
             const data = await API.fetchJson(
                 `/api/music?type=search&source=${source}&q=${encodeURIComponent(keyword)}&count=${count}&page=${page}`
             );
@@ -980,7 +1192,7 @@ const API = {
 
     getSongUrl: (song, quality = "320") => {
         const src = song.source || "netease";
-        if (src === "kuwo" || src === "spotify") {
+        if (src === "kuwo" || src === "youtube") {
             return `/api/music?type=url&source=${src}&id=${encodeURIComponent(song.url_id || song.id)}&br=${quality}`;
         }
         const signature = API.generateSignature();
@@ -989,7 +1201,7 @@ const API = {
 
     getLyric: (song) => {
         const src = song.source || "netease";
-        if (src === "kuwo" || src === "spotify") {
+        if (src === "kuwo" || src === "youtube") {
             return `/api/music?type=lyric&source=${src}&id=${encodeURIComponent(song.lyric_id || song.id)}`;
         }
         const signature = API.generateSignature();
@@ -998,7 +1210,7 @@ const API = {
 
     getPicUrl: (song) => {
         const src = song.source || "netease";
-        if (src === "kuwo" || src === "spotify") {
+        if (src === "kuwo" || src === "youtube") {
             return `/api/music?type=pic&source=${src}&id=${encodeURIComponent(song.pic_id || song.id)}`;
         }
         const signature = API.generateSignature();
@@ -4032,7 +4244,7 @@ function updateCurrentSongInfo(song, options = {}) {
                 if (!data || !data.url) {
                     dom.albumCover.classList.remove("loading");
                     // 酷我 / Spotify 无封面时静默回退到占位图，不报错
-                    if (song.source === "kuwo" || song.source === "spotify") return;
+                    if (song.source === "kuwo" || song.source === "youtube") return;
                     throw new Error("封面地址缺失");
                 }
 
@@ -4236,7 +4448,7 @@ function createSearchResultItem(song, index) {
     title.textContent = song.name || "未知歌曲";
 
     // Spotify 来源：标注 30 秒官方试听
-    if (song.preview || song.source === "spotify") {
+    if (song.preview) {
         const badge = document.createElement("span");
         badge.className = "search-result-badge";
         badge.textContent = "30s 试听";
@@ -4293,7 +4505,9 @@ function createSearchResultItem(song, index) {
 
     actions.appendChild(favoriteButton);
     actions.appendChild(playButton);
-    actions.appendChild(downloadButton);
+    if (song.source !== "youtube") {
+        actions.appendChild(downloadButton);
+    }
 
     item.appendChild(selectionToggle);
     item.appendChild(info);
@@ -6222,7 +6436,7 @@ function pickRandomExploreGenre() {
     return genres[index];
 }
 
-const EXPLORE_RADAR_SOURCES = ["netease", "kuwo", "joox"];
+const EXPLORE_RADAR_SOURCES = ["netease", "kuwo", "youtube"];
 
 function shuffleArray(arr) {
     const a = arr.slice();
@@ -6651,6 +6865,10 @@ function scrollToCurrentLyric(element, containerOverride) {
 // 修复：下载歌曲
 async function downloadSong(song, quality = "320") {
     try {
+        if (song && song.source === "youtube") {
+            showNotification("YouTube Music 曲目由官方播放器流式播放，不支持下载", "warning");
+            return;
+        }
         showNotification("正在准备下载...");
 
         const audioUrl = API.getSongUrl(song, quality);
