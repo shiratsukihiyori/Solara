@@ -544,6 +544,37 @@
         </div>
         <div class="modal-body">
             <section class="settings-section">
+                <h3>播放与搜索</h3>
+                <div class="settings-row">
+                    <label for="defaultSourceSelect">默认音源</label>
+                    <select id="defaultSourceSelect" class="settings-select"></select>
+                </div>
+                <div class="settings-row">
+                    <label for="defaultQualitySelect">默认播放音质</label>
+                    <select id="defaultQualitySelect" class="settings-select">
+                        <option value="128">标准 (128k)</option>
+                        <option value="192">高音质 (192k)</option>
+                        <option value="320">极高 (320k)</option>
+                    </select>
+                </div>
+                <div class="settings-row">
+                    <label for="ytDownloadQualitySelect">YouTube 下载音质</label>
+                    <select id="ytDownloadQualitySelect" class="settings-select">
+                        <option value="128">MP3 128k</option>
+                        <option value="192">MP3 192k</option>
+                        <option value="320">MP3 320k</option>
+                    </select>
+                </div>
+                <div class="heartbeat-toggle-row">
+                    <label for="dynamicPaletteToggle" class="toggle-label">
+                        <span>动态配色（封面取色）</span>
+                        <input type="checkbox" id="dynamicPaletteToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <p class="settings-hint">关闭后使用固定主题色，低配设备更流畅。</p>
+            </section>
+            <section class="settings-section">
                 <h3>探索雷达风格</h3>
                 <p class="settings-hint">选择您喜欢的音乐风格，探索雷达将从中为您推荐歌曲。</p>
                 <div id="radarGenreList" class="genre-grid">
@@ -559,6 +590,11 @@
                     </label>
                 </div>
                 <p class="settings-hint">开启后，探索雷达将在歌曲即将播放完毕时自动补充同风格歌曲，不间断推送。</p>
+            </section>
+            <section class="settings-section">
+                <h3>本地数据</h3>
+                <p class="settings-hint">清除播放列表、收藏、搜索记录、配色缓存等本地数据（不影响云端同步）。</p>
+                <button id="clearLocalDataBtn" class="load-custom-playlist-btn settings-danger-btn">清除本地缓存</button>
             </section>
             <section class="settings-section">
                 <h3>自定义预设歌单</h3>

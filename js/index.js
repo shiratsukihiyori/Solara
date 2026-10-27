@@ -83,6 +83,11 @@ const dom = {
     settingsModal: document.getElementById("settingsModal"),
     closeSettingsBtn: document.getElementById("closeSettingsBtn"),
     saveSettingsBtn: document.getElementById("saveSettingsBtn"),
+    defaultSourceSelect: document.getElementById("defaultSourceSelect"),
+    defaultQualitySelect: document.getElementById("defaultQualitySelect"),
+    ytDownloadQualitySelect: document.getElementById("ytDownloadQualitySelect"),
+    dynamicPaletteToggle: document.getElementById("dynamicPaletteToggle"),
+    clearLocalDataBtn: document.getElementById("clearLocalDataBtn"),
     openSettingsBtn: document.getElementById("openSettingsBtn"),
     radarGenreList: document.getElementById("radarGenreList"),
     fallbackPlaylistIds: document.getElementById("fallbackPlaylistIds"),
@@ -989,6 +994,16 @@ const savedPlayMode = (() => {
 
 const savedPlaybackQuality = normalizeQuality(safeGetLocalStorage("playbackQuality"));
 
+const savedYtDownloadQuality = (() => {
+    const stored = safeGetLocalStorage("ytDownloadQuality");
+    return ["128", "192", "320"].includes(stored) ? stored : "192";
+})();
+
+const savedDynamicPaletteEnabled = (() => {
+    const stored = safeGetLocalStorage("dynamicPaletteEnabled");
+    return stored === null || stored === undefined ? true : stored === "1";
+})();
+
 const savedVolume = (() => {
     const stored = safeGetLocalStorage("playerVolume");
     const volume = Number.parseFloat(stored);
@@ -1309,6 +1324,8 @@ const state = {
     userScrolledLyrics: false, // 新增：用户是否手动滚动歌词
     lyricsScrollTimeout: null, // 新增：歌词滚动超时
     themeDefaultsCaptured: false,
+    ytDownloadQuality: savedYtDownloadQuality,
+    dynamicPaletteEnabled: savedDynamicPaletteEnabled,
     dynamicPalette: null,
     currentPaletteImage: null,
     pendingPaletteData: null,
@@ -2559,6 +2576,10 @@ async function fetchPaletteData(imageUrl, signal) {
 }
 
 async function updateDynamicBackground(imageUrl) {
+    if (!state.dynamicPaletteEnabled) {
+        resetDynamicBackground();
+        return;
+    }
     paletteRequestId += 1;
     const requestId = paletteRequestId;
 
@@ -6913,7 +6934,8 @@ async function downloadYouTubeAsMp3(song, quality = "320") {
     if (!window.lamejs || !window.lamejs.Mp3Encoder) {
         throw new Error("MP3 编码器未加载");
     }
-    const kbps = String(quality) === "128" ? 128 : String(quality) === "192" ? 192 : 320;
+    const rawQuality = String(quality || state.ytDownloadQuality || "192");
+    const kbps = rawQuality === "128" ? 128 : rawQuality === "192" ? 192 : 320;
     const videoId = song.url_id || song.id;
     const src = `/api/music?type=stream&source=youtube&id=${encodeURIComponent(videoId)}`;
 
@@ -7144,6 +7166,14 @@ function initSettings() {
     if (dom.saveSettingsBtn) {
         dom.saveSettingsBtn.addEventListener("click", saveSettings);
     }
+
+    if (dom.clearLocalDataBtn) {
+        dom.clearLocalDataBtn.addEventListener("click", () => {
+            if (!window.confirm("确定清除本地缓存？播放列表、收藏与本地设置将重置（云端同步数据不受影响）")) return;
+            try { localStorage.clear(); } catch (_) {}
+            window.location.reload();
+        });
+    }
     // 绑定齿轮图标按钮
     const openBtn = dom.openSettingsBtn || document.getElementById("openSettingsBtn");
     if (openBtn) {
@@ -7178,6 +7208,7 @@ function renderGenreList() {
 function openSettingsModal() {
     if (dom.settingsModal) {
         applySettingsToUI();
+        applyPlaybackSettingsToUI();
         dom.settingsModal.classList.add("show");
         dom.settingsModal.setAttribute("aria-hidden", "false");
     }
@@ -7193,9 +7224,13 @@ function closeSettingsModal() {
 async function saveSettings() {
     const selectedGenres = Array.from(dom.radarGenreList.querySelectorAll("input:checked")).map(cb => cb.value);
     
+    const finalGenres = selectedGenres.length > 0
+        ? selectedGenres
+        : ((state.radarSettings && Array.isArray(state.radarSettings.genres) && state.radarSettings.genres.length)
+            ? state.radarSettings.genres
+            : ["流行"]);
     if (selectedGenres.length === 0) {
-        showNotification("请至少选择一个风格", "warning");
-        return;
+        showNotification("未选择风格，保留原有风格设置", "warning");
     }
 
     const heartbeatMode = dom.heartbeatModeCheckbox ? dom.heartbeatModeCheckbox.checked : false;
@@ -7205,11 +7240,48 @@ async function saveSettings() {
         : [];
 
     state.radarSettings = {
-        genres: selectedGenres,
+        genres: finalGenres,
         heartbeatMode: heartbeatMode,
         fallbackPlaylistIds: fallbackIds.length > 0 ? fallbackIds : undefined
     };
     state.heartbeatMode = heartbeatMode;
+
+    if (dom.defaultSourceSelect) {
+        const nextSource = normalizeSource(dom.defaultSourceSelect.value);
+        if (nextSource !== state.searchSource) {
+            state.searchSource = nextSource;
+            safeSetLocalStorage("searchSource", nextSource);
+            buildSourceMenu();
+            updateSourceLabel();
+        }
+    }
+
+    if (dom.defaultQualitySelect) {
+        const nextQuality = normalizeQuality(dom.defaultQualitySelect.value);
+        if (nextQuality !== state.playbackQuality) {
+            state.playbackQuality = nextQuality;
+            updateQualityLabel();
+            buildQualityMenu();
+            savePlayerState();
+        }
+    }
+
+    if (dom.ytDownloadQualitySelect) {
+        const nextYtQuality = dom.ytDownloadQualitySelect.value;
+        if (["128", "192", "320"].includes(nextYtQuality)) {
+            state.ytDownloadQuality = nextYtQuality;
+            safeSetLocalStorage("ytDownloadQuality", nextYtQuality);
+        }
+    }
+
+    if (dom.dynamicPaletteToggle) {
+        const enabled = dom.dynamicPaletteToggle.checked;
+        state.dynamicPaletteEnabled = enabled;
+        safeSetLocalStorage("dynamicPaletteEnabled", enabled ? "1" : "0");
+        if (!enabled) {
+            resetDynamicBackground();
+        }
+    }
 
     // 本地保存
     safeSetLocalStorage("radarSettings", JSON.stringify(state.radarSettings));
@@ -7308,6 +7380,26 @@ async function loadSettings() {
     // 注意：云端加载已在 bootstrapPersistentStorage 中统一处理
 }
 
+function applyPlaybackSettingsToUI() {
+    if (dom.defaultSourceSelect) {
+        if (!dom.defaultSourceSelect.options.length) {
+            dom.defaultSourceSelect.innerHTML = SOURCE_OPTIONS
+                .map(option => `<option value="${option.value}">${option.label}</option>`)
+                .join("");
+        }
+        dom.defaultSourceSelect.value = state.searchSource || SOURCE_OPTIONS[0].value;
+    }
+    if (dom.defaultQualitySelect) {
+        dom.defaultQualitySelect.value = normalizeQuality(state.playbackQuality);
+    }
+    if (dom.ytDownloadQualitySelect) {
+        dom.ytDownloadQualitySelect.value = String(state.ytDownloadQuality || "192");
+    }
+    if (dom.dynamicPaletteToggle) {
+        dom.dynamicPaletteToggle.checked = state.dynamicPaletteEnabled !== false;
+    }
+}
+
 function applySettingsToUI() {
     if (!state.radarSettings || !dom.radarGenreList) return;
     
@@ -7327,6 +7419,8 @@ function applySettingsToUI() {
         const ids = state.radarSettings.fallbackPlaylistIds;
         dom.fallbackPlaylistIds.value = Array.isArray(ids) && ids.length > 0 ? ids.join("\n") : "";
     }
+
+
 }
 
 // 在 bootstrapPersistentStorage 之后或期间初始化设置
