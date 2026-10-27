@@ -6264,34 +6264,42 @@ function playNext() {
         playlist = state.searchResults;
     }
 
-    if (playlist.length === 0) {
+    // 列表空了：若开着心动模式且有当前歌曲，就按「这首歌的音源」继续；否则收摊
+    const canSeedHeartbeat = state.heartbeatMode && !!state.currentSong;
+    if (playlist.length === 0 && !canSeedHeartbeat) {
         clearLyricsIfLibraryEmpty();
         return;
     }
 
-    if (state.heartbeatMode && state.currentPlaylist === "playlist"
-        && playlist.length > 0) {
+    if (state.heartbeatMode && !state._heartbeatLoading) {
         const remaining = playlist.length - state.currentTrackIndex - 1;
-        debugLog(`[心跳] 检查触发条件: remaining=${remaining}, _heartbeatLoading=${state._heartbeatLoading}, lastRadarGenre=${state.lastRadarGenre}`);
-        if (remaining <= 3 && !state._heartbeatLoading) {
+        debugLog(`[心跳] 检查触发条件: 列表=${state.currentPlaylist} remaining=${remaining}, _heartbeatLoading=${state._heartbeatLoading}, lastRadarGenre=${state.lastRadarGenre}`);
+        if (remaining <= 3) {
             if (!state.lastRadarGenre) {
                 state.lastRadarGenre = pickRandomExploreGenre();
                 debugLog(`[心跳] lastRadarGenre 为空，随机选取: ${state.lastRadarGenre}`);
             }
+            const wasEmpty = playlist.length === 0;
             state._heartbeatLoading = true;
             debugLog(`[心跳] 触发补充，genre=${state.lastRadarGenre}`);
-            heartbeatFillSimilar().finally(() => {
-                state._heartbeatLoading = false;
-                debugLog(`[心跳] 补充完成`);
+            heartbeatFillSimilar().then((added) => {
+                debugLog(`[心跳] 补充完成，新增 ${added} 首`);
+                if (!state.heartbeatMode) return;
+                if (added > 0 && wasEmpty) {
+                    // 原本列表是空的：从头开始播新补进来的这首
+                    state.currentTrackIndex = 0;
+                    playIndexInCurrentList(0);
+                    return;
+                }
                 // 如果心跳加载期间播放停在了末尾，补完后自动继续
-                const pl = state.currentPlaylist === "playlist" ? state.playlistSongs
-                    : state.currentPlaylist === "online" ? state.onlineSongs
-                    : state.currentPlaylist === "search" ? state.searchResults
-                    : [];
-                if (state.heartbeatMode && pl.length > 0
-                    && state.currentTrackIndex >= pl.length - 1) {
+                const pl = getActivePlaylistSongs();
+                if (pl.length > 0 && state.currentTrackIndex >= pl.length - 1) {
                     setTimeout(() => playNext(), 100);
                 }
+            }).catch((error) => {
+                debugLog(`[心跳] 补充失败: ${error.message}`);
+            }).finally(() => {
+                state._heartbeatLoading = false;
             });
         }
     }
@@ -6701,51 +6709,159 @@ async function exploreOnlineMusic(genre) {
     }
 }
 
-// 心动模式：按当前歌曲补充同歌手/同风格歌曲（参考主流播放器的电台逻辑）
+// ---------- 心动模式：音源选择 ----------
+// 规则（按优先级）：
+//   1) 列表为空 → 用刚搜索/当前播放这首歌的音源
+//   2) 列表里只有一个音源 → 直接走这个音源的「心动模式」
+//   3) 列表里混合多音源 → 看访问者 IP：中国 → 网易云/酷我，境外 → YouTube
+let _visitorRegionCache = null;
+
+async function getVisitorRegion() {
+    if (_visitorRegionCache) return _visitorRegionCache;
+    try {
+        const res = await fetch("/api/geo", { credentials: "same-origin", cache: "no-store" });
+        if (res.ok) {
+            const data = await res.json();
+            const country = String(data.country || "").toUpperCase();
+            _visitorRegionCache = {
+                country,
+                cn: typeof data.cn === "boolean" ? data.cn : country === "CN",
+                via: data.via || "edge",
+            };
+            debugLog(`[心跳] 访问者地区: ${country || "?"} (${_visitorRegionCache.via}) cn=${_visitorRegionCache.cn}`);
+            return _visitorRegionCache;
+        }
+    } catch (error) {
+        debugLog(`[心跳] 地区接口不可用: ${error.message}`);
+    }
+    // 兜底：浏览器语言
+    const lang = String(navigator.language || "").toLowerCase();
+    _visitorRegionCache = { country: "", cn: lang.startsWith("zh"), via: "language" };
+    return _visitorRegionCache;
+}
+
+function getActivePlaylistSongs() {
+    if (state.currentPlaylist === "playlist") return state.playlistSongs || [];
+    if (state.currentPlaylist === "online") return state.onlineSongs || [];
+    if (state.currentPlaylist === "search") return state.searchResults || [];
+    if (state.currentPlaylist === "favorites") return state.favoriteSongs || [];
+    return [];
+}
+
+function playIndexInCurrentList(index) {
+    if (state.currentPlaylist === "playlist") return playPlaylistSong(index);
+    if (state.currentPlaylist === "online") return playOnlineSong(index);
+    if (state.currentPlaylist === "search") return playSearchResult(index);
+    return undefined;
+}
+
+function resolveHeartbeatSource(list, currentSong, region) {
+    const sources = new Set();
+    (list || []).forEach((song) => {
+        if (song && song.source) sources.add(normalizeSource(song.source));
+    });
+
+    // 1) 列表为空 → 刚搜索/当前这首歌的音源
+    if (sources.size === 0) {
+        if (currentSong && currentSong.source) return normalizeSource(currentSong.source);
+        return normalizeSource(state.searchSource || SOURCE_OPTIONS[0].value);
+    }
+    // 2) 单一音源 → 就是它
+    if (sources.size === 1) return [...sources][0];
+    // 3) 混合音源 → 按访问者地区
+    if (region && region.cn) {
+        if (sources.has("netease")) return "netease";
+        if (sources.has("kuwo")) return "kuwo";
+        return "netease";
+    }
+    return "youtube";
+}
+
+function appendHeartbeatSongs(songs) {
+    if (!songs || songs.length === 0) return 0;
+    state.playlistSongs = (state.playlistSongs || []).concat(songs);
+    state.onlineSongs = state.playlistSongs.slice();
+    if (state.currentPlaylist === "search") {
+        state.searchResults = (state.searchResults || []).concat(songs);
+    }
+    renderPlaylist();
+    updatePlaylistHighlight();
+    return songs.length;
+}
+
+// 心动模式：按当前歌曲补充同歌手/同风格歌曲（音源按上面的规则选定）
 async function heartbeatFillSimilar() {
     const cur = state.currentSong;
-    if (!cur) return;
-    const artists = Array.isArray(cur.artist) ? cur.artist : String(cur.artist || "").split(/[,，、&/]/);
-    const artistName = String(artists[0] || "").trim();
-    const existing = new Set((state.playlistSongs || []).map((song) => getSongKey(song)).filter(Boolean));
+    const active = getActivePlaylistSongs();
+    if (!cur && active.length === 0) return 0;
+
+    const region = await getVisitorRegion();
+    const targetSource = resolveHeartbeatSource(active, cur, region);
+    const sourceLabel = (SOURCE_OPTIONS.find((o) => o.value === targetSource) || {}).label || targetSource;
+    debugLog(`[心跳] 选定音源: ${targetSource} (${sourceLabel})`);
+
+    const existing = new Set(active.map((song) => getSongKey(song)).filter(Boolean));
+    if (cur) existing.add(getSongKey(cur));
     let picked = [];
 
-    if (artistName) {
+    const artists = Array.isArray(cur && cur.artist) ? cur.artist : String((cur && cur.artist) || "").split(/[,，、&/]/);
+    const artistName = String(artists[0] || "").trim();
+    const songName = String((cur && cur.name) || "").trim();
+
+    // ① 优先用音源原厂推荐（YouTube 电台 / 网易云相似歌曲 / 酷我同歌手）
+    const seedId = String((cur && (cur.url_id || cur.id)) || "");
+    if (seedId) {
         try {
-            const res = await API.search(artistName, "netease", 30, 1);
-            const list = (res || []).filter((song) => {
-                const names = Array.isArray(song.artist) ? song.artist.join(" ") : String(song.artist || "");
-                return names.includes(artistName) && !existing.has(getSongKey(song));
-            });
-            picked = picked.concat(shuffleArray(list).slice(0, 10));
-            debugLog(`[心跳] 同歌手补充 ${picked.length} 首 (${artistName})`);
+            const related = await API.fetchJson(
+                `/api/music?type=related&source=${encodeURIComponent(targetSource)}&id=${encodeURIComponent(seedId)}`
+            );
+            if (Array.isArray(related)) {
+                picked = related.filter((song) => !existing.has(getSongKey(song))).slice(0, 10);
+                debugLog(`[心跳] 原厂推荐(${sourceLabel}) 返回 ${picked.length} 首`);
+            }
         } catch (error) {
-            debugLog(`[心跳] 同歌手搜索失败: ${error.message}`);
+            debugLog(`[心跳] 原厂推荐不可用: ${error.message}`);
+        }
+    }
+
+    if (picked.length < 5 && (artistName || songName)) {
+        // ② 降级：按同歌手/歌名搜索
+        const query = artistName || songName;
+        try {
+            const res = await API.search(query, targetSource, 30, 1);
+            const list = (res || []).filter((song) => {
+                if (existing.has(getSongKey(song))) return false;
+                if (!artistName) return true;
+                const names = Array.isArray(song.artist) ? song.artist.join(" ") : String(song.artist || "");
+                return names.includes(artistName);
+            });
+            picked = picked.concat(shuffleArray(list).slice(0, Math.max(0, 10 - picked.length)));
+            debugLog(`[心跳] ${sourceLabel} 同歌手补充至 ${picked.length} 首 (${query})`);
+        } catch (error) {
+            debugLog(`[心跳] ${sourceLabel} 同歌手搜索失败: ${error.message}`);
         }
     }
 
     if (picked.length < 5) {
         const genre = state.lastRadarGenre || pickRandomExploreGenre();
         try {
-            const res = await API.search(genre, "netease", 30, 1);
+            const res = await API.search(genre, targetSource, 30, 1);
             const extra = (res || []).filter((song) => !existing.has(getSongKey(song)));
             picked = picked.concat(shuffleArray(extra).slice(0, 10 - picked.length));
-            debugLog(`[心跳] 同风格补充至 ${picked.length} 首 (${genre})`);
+            debugLog(`[心跳] ${sourceLabel} 同风格补充至 ${picked.length} 首 (${genre})`);
         } catch (error) {
-            debugLog(`[心跳] 同风格搜索失败: ${error.message}`);
+            debugLog(`[心跳] ${sourceLabel} 同风格搜索失败: ${error.message}`);
         }
     }
 
     if (picked.length === 0) {
-        showNotification("心动模式：没有找到可补充的歌曲", "warning");
-        return;
+        showNotification(`心动模式：${sourceLabel} 没有找到可补充的歌曲`, "warning");
+        return 0;
     }
 
-    state.playlistSongs = (state.playlistSongs || []).concat(picked);
-    state.onlineSongs = state.playlistSongs.slice();
-    renderPlaylist();
-    updatePlaylistHighlight();
-    showNotification(`心动模式：已补充 ${picked.length} 首相似歌曲`, "success");
+    const added = appendHeartbeatSongs(picked);
+    showNotification(`心动模式：已从 ${sourceLabel} 补充 ${added} 首相似歌曲`, "success");
+    return added;
 }
 
 // 修复：加载歌词

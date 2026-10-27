@@ -9,7 +9,7 @@
 - **YouTube Music 整曲播放** — 官方 IFrame 播放器为主路；直连失败自动切换服务器线路（Worker 自行取票，无需外部服务）
 - **YouTube → MP3 下载** — 浏览器端 lamejs 转码，128/192/320k 三档，不经过任何第三方服务
 - **双通道 API** — 优先 JSONP 直连上游，失败降级到 Pages Function 代理转发
-- **心动模式** — 播放列表快播完时，按当前歌曲自动补充同歌手/同风格歌曲
+- **心动模式** — 播放列表快播完时自动补歌：优先使用音源原厂推荐（YouTube 电台 / 网易云相似歌曲 / 酷我同歌手），列表混合多音源时按访客地区分流（境内→网易云/酷我，境外→YouTube）
 - **探索雷达** — 按选定风格随机发现新歌，支持全选/清空快捷操作
 - **网易云歌单** — 粘贴歌单 ID 或分享链接，直接加载到播放列表并开始播放
 - **动态歌词** — 逐行滚动高亮，手动滚动后 3 秒自动回位（YouTube 源显示「不支持歌词」）
@@ -53,6 +53,16 @@
 | 酷我 | 酷我现代搜索接口（免登录、标准 JSON、完整索引） | `antiserver` 转链 + Range 透传中继 | `songinfoandlrc`，失败自动重试 5 次 |
 | YouTube Music | YouTube Music Innertube（免 key、免登录） | ① 官方 IFrame 整曲播放 ② 失败时 Worker 用 VISIONOS 客户端 + visitorData 取票，直连 `googlevideo` 拉流 | 暂不支持（显示「不支持歌词」）|
 
+### 心动模式的原厂推荐接口
+
+| 音源 | 接口 | 说明 |
+|------|------|------|
+| YouTube Music | `youtubei/v1/next` + `RDAMVM<videoId>` 电台播放列表 | 免登录，返回平台自身的电台推荐 |
+| 网易云 | `api/discovery/simiSong` | 需登录 Cookie（环境变量 `NETEASE_COOKIE`；未配置时自动降级为同歌手/风格搜索）|
+| 酷我 | 官方曲库同歌手检索 | 酷我没有公开推荐接口 |
+
+访客地区判定用 `/api/geo`（Cloudflare 边缘 `request.cf.country`，非 CF 环境退化为 Accept-Language）。
+
 ### YouTube 播放与下载说明
 
 - **主路**：浏览器直连 YouTube 官方 IFrame 播放器，整曲播放，官方分账，合规。
@@ -84,6 +94,7 @@
 |------|------|
 | `PASSWORD` | 开启访问口令保护 |
 | `LANGUAGE=ENG` | 切换为英文界面 |
+| `NETEASE_COOKIE` | 可选：网易云登录 Cookie，用于心动模式的官方相似歌曲推荐 |
 
 > 酷我与 YouTube Music 均为免登录接口，无需额外密钥。
 

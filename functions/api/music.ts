@@ -455,6 +455,126 @@ async function streamProxy(target: string, request: Request): Promise<Response> 
   });
 }
 
+// ---------- 原厂推荐（心动模式补充用） ----------
+async function youtubeRelated(videoId: string): Promise<any[]> {
+  const visitor = await getYouTubeVisitor();
+  const res = await fetchWithTimeout(
+    "https://music.youtube.com/youtubei/v1/next?prettyPrint=false",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "user-agent": BROWSER_UA,
+        "x-youtube-client-name": "67",
+        "x-youtube-client-version": YTM_CLIENT_VERSION,
+        origin: "https://music.youtube.com",
+        "x-goog-visitor-id": visitor,
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: "WEB_REMIX",
+            clientVersion: YTM_CLIENT_VERSION,
+            hl: "zh-CN",
+            gl: "JP",
+            visitorData: visitor,
+          },
+        },
+        videoId,
+        playlistId: `RDAMVM${videoId}`,
+        isAudioOnly: true,
+      }),
+    },
+    15000
+  );
+  if (!res.ok) throw new Error(`youtube next ${res.status}`);
+  const data = await res.json();
+  const items: any[] = [];
+  const walk = (node: any) => {
+    if (!node) return;
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (typeof node !== "object") return;
+    if (node.playlistPanelVideoRenderer) items.push(node.playlistPanelVideoRenderer);
+    Object.keys(node).forEach((k) => walk(node[k]));
+  };
+  walk(data);
+  const seen = new Set<string>();
+  return items
+    .map((it: any) => {
+      const title = (it.title?.runs || []).map((r: any) => r.text || "").join("").trim();
+      const byline = (it.longBylineText?.runs || it.shortBylineText?.runs || [])
+        .map((r: any) => r.text || "")
+        .join("")
+        .trim();
+      const duration = it.lengthText?.runs?.[0]?.text || "";
+      const artistName = byline
+        .split("•")
+        .map((part: string) => part.trim())
+        .filter((part: string) => part && !/次观看|人赞|views?$|likes?$/i.test(part))[0] || "";
+      return {
+        id: String(it.videoId || ""),
+        name: title,
+        artist: artistName ? [artistName] : ["YouTube Music"],
+        album: "",
+        duration,
+        pic_id: `https://i.ytimg.com/vi/${it.videoId}/mqdefault.jpg`,
+        url_id: String(it.videoId || ""),
+        lyric_id: String(it.videoId || ""),
+        source: "youtube",
+      };
+    })
+    .filter((song: any) => {
+      if (!song.id || !song.name || seen.has(song.id)) return false;
+      seen.add(song.id);
+      return true;
+    });
+}
+
+async function neteaseRelated(songId: string, env: any): Promise<any[]> {
+  const cookie = String(env?.NETEASE_COOKIE || "").trim();
+  if (!cookie) return [];
+  const res = await fetchWithTimeout(
+    `https://music.163.com/api/discovery/simiSong?songid=${encodeURIComponent(songId)}&limit=20`,
+    {
+      headers: {
+        "user-agent": BROWSER_UA,
+        referer: "https://music.163.com/",
+        cookie,
+      },
+    },
+    12000
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  const songs = Array.isArray(data?.songs) ? data.songs : [];
+  return songs
+    .map((s: any) => {
+      const artists = Array.isArray(s.artists) ? s.artists : Array.isArray(s.ar) ? s.ar : [];
+      return {
+        id: String(s.id || ""),
+        name: String(s.name || ""),
+        artist: artists.map((a: any) => String(a.name || "")).filter(Boolean),
+        album: String(s.album?.name || ""),
+        pic_id: String(s.album?.picUrl || ""),
+        url_id: String(s.id || ""),
+        lyric_id: String(s.id || ""),
+        source: "netease",
+      };
+    })
+    .filter((song: any) => song.id && song.name);
+}
+
+async function kuwoRelated(songId: string): Promise<any[]> {
+  const info = await kuwoSongInfo(songId);
+  const artistRaw = String(info?.data?.songinfo?.artist || "");
+  const artist = artistRaw.split(/&|\//)[0].trim();
+  if (!artist) return [];
+  return await kuwoSearch(artist, 1, 20);
+}
+
 // ---------- 主入口 ----------
 export async function onRequest(context: any): Promise<Response> {
   const { request, env } = context;
@@ -473,6 +593,25 @@ export async function onRequest(context: any): Promise<Response> {
   try {
     // 图片中转不依赖音源，先行处理
 
+
+if (type === "related") {
+  if (!id) return jsonResponse({ error: "missing id" }, 400);
+  try {
+    let tracks: any[] = [];
+    if (source === "youtube") {
+      tracks = await youtubeRelated(id);
+    } else if (source === "netease") {
+      tracks = await neteaseRelated(id, env);
+    } else if (source === "kuwo") {
+      tracks = await kuwoRelated(id);
+    } else {
+      return jsonResponse({ error: "unsupported source" }, 400);
+    }
+    return jsonResponse(tracks);
+  } catch (error: any) {
+    return jsonResponse({ error: String(error?.message || error) }, 502);
+  }
+}
 
 if (type === "img") {
       const pic = url.searchParams.get("u") || "";
