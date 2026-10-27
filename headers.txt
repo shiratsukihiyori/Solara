@@ -1,0 +1,17 @@
+HTTP/1.1 200 Connection established
+
+HTTP/1.1 502 Bad Gateway
+Date: Tue, 27 Oct 2026 09:08:57 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 48
+Connection: keep-alive
+Access-Control-Allow-Origin: *
+Cache-Control: no-store
+Access-Control-Allow-Headers: *
+Access-Control-Allow-Methods: GET, HEAD, OPTIONS
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=QaPeoBhk3j2Q9bZGuQU6VRB%2FLU4INLlO0mJ0TDeL6Pj2QSEDLJW03%2BIa8OcNKgeXaknjRmygP6vuespDlMjghG6TyjdZ%2BoNDds7z0DkhjPGulhpjQZreA1ErGjJCDX0mm0zSQYxUkg%3D%3D"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+Server: cloudflare
+CF-RAY: a5108f1e0d2476b8-SEA
+alt-svc: h3=":443"; ma=86400
+

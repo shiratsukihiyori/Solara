@@ -4534,9 +4534,7 @@ function createSearchResultItem(song, index) {
 
     actions.appendChild(favoriteButton);
     actions.appendChild(playButton);
-    if (song.source !== "youtube") {
-        actions.appendChild(downloadButton);
-    }
+    actions.appendChild(downloadButton);
 
     item.appendChild(selectionToggle);
     item.appendChild(info);
@@ -4843,10 +4841,21 @@ function showQualityMenu(event, index, type) {
         existingMenu.remove();
     }
 
-    // 创建新的质量菜单
+    // 创建新的质量菜单（YouTube 曲目为浏览器端转码，只提供 MP3 档位）
+    const songForMenu = type === "search" ? state.searchResults[index]
+        : type === "online" ? state.onlineSongs[index]
+        : type === "playlist" ? state.playlistSongs[index]
+        : type === "favorites" ? state.favoriteSongs[index] : null;
+    const isYoutubeSong = !!(songForMenu && songForMenu.source === "youtube");
     const menu = document.createElement("div");
     menu.className = "dynamic-quality-menu";
-    menu.innerHTML = `
+    menu.innerHTML = isYoutubeSong
+        ? `
+        <div class="quality-option" onclick="downloadWithQuality(event, ${index}, '${type}', '128')">MP3 (128k)</div>
+        <div class="quality-option" onclick="downloadWithQuality(event, ${index}, '${type}', '192')">MP3 (192k)</div>
+        <div class="quality-option" onclick="downloadWithQuality(event, ${index}, '${type}', '320')">MP3 (320k)</div>
+    `
+        : `
         <div class="quality-option" onclick="downloadWithQuality(event, ${index}, '${type}', '128')">标准音质 (128k)</div>
         <div class="quality-option" onclick="downloadWithQuality(event, ${index}, '${type}', '192')">高音质 (192k)</div>
         <div class="quality-option" onclick="downloadWithQuality(event, ${index}, '${type}', '320')">超高音质 (320k)</div>
@@ -6899,12 +6908,119 @@ function scrollToCurrentLyric(element, containerOverride) {
 
 }
 
+// YouTube 曲目：浏览器端 m4a(AAC) → MP3 转码下载（lamejs，纯前端）
+async function downloadYouTubeAsMp3(song, quality = "320") {
+    if (!window.lamejs || !window.lamejs.Mp3Encoder) {
+        throw new Error("MP3 编码器未加载");
+    }
+    const kbps = String(quality) === "128" ? 128 : String(quality) === "192" ? 192 : 320;
+    const videoId = song.url_id || song.id;
+    const src = `/api/music?type=stream&source=youtube&id=${encodeURIComponent(videoId)}`;
+
+    showNotification("正在获取音频…", "info");
+    // Worker 单次子请求在 ~1MB 左右会被截断，这里 256KB 分片拉取再拼接
+    const CHUNK = 256 * 1024;
+    const first = await fetch(src, { headers: { Range: `bytes=0-${CHUNK - 1}` } });
+    if (!first.ok) throw new Error(`音频获取失败 (${first.status})`);
+    const rangeHeader = first.headers.get("content-range") || "";
+    const totalMatch = rangeHeader.match(/\/(\d+)\s*$/);
+    const total = totalMatch ? Number(totalMatch[1]) : 0;
+    const parts = [new Uint8Array(await first.arrayBuffer())];
+    if (total > CHUNK) {
+        for (let offset = CHUNK; offset < total; offset += CHUNK) {
+            const end = Math.min(offset + CHUNK - 1, total - 1);
+            const resp = await fetch(src, { headers: { Range: `bytes=${offset}-${end}` } });
+            if (!resp.ok) throw new Error(`音频分片获取失败 (${resp.status})`);
+            parts.push(new Uint8Array(await resp.arrayBuffer()));
+            const pct = Math.min(99, Math.round(((offset + CHUNK) / total) * 100));
+            showNotification(`正在获取音频… ${pct}%`, "info");
+        }
+    }
+    const totalLen = parts.reduce((n, p) => n + p.byteLength, 0);
+    const raw = new Uint8Array(totalLen);
+    {
+        let pos = 0;
+        for (const part of parts) { raw.set(part, pos); pos += part.byteLength; }
+    }
+    if (raw.byteLength < 1024) throw new Error("音频数据为空");
+
+    showNotification("正在解码音频…", "info");
+    const AudioCtor = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtor();
+    let audioBuf;
+    try {
+        audioBuf = await ctx.decodeAudioData(raw.buffer instanceof ArrayBuffer ? raw.buffer : raw.slice(0).buffer);
+    } finally {
+        try { ctx.close(); } catch (_) {}
+    }
+
+    let sampleRate = audioBuf.sampleRate;
+    let channels = Math.min(2, audioBuf.numberOfChannels);
+    let leftF32 = audioBuf.getChannelData(0);
+    let rightF32 = channels > 1 ? audioBuf.getChannelData(1) : null;
+
+    const supported = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
+    if (!supported.includes(sampleRate)) {
+        showNotification("正在重采样…", "info");
+        const offline = new OfflineAudioContext(channels, Math.ceil(audioBuf.duration * 44100), 44100);
+        const srcNode = offline.createBufferSource();
+        srcNode.buffer = audioBuf;
+        srcNode.connect(offline.destination);
+        srcNode.start();
+        const rendered = await offline.startRendering();
+        audioBuf = rendered;
+        sampleRate = 44100;
+        channels = Math.min(2, audioBuf.numberOfChannels);
+        leftF32 = audioBuf.getChannelData(0);
+        rightF32 = channels > 1 ? audioBuf.getChannelData(1) : null;
+    }
+
+    showNotification(`正在转码 MP3 (${kbps}k)…`, "info");
+    const toInt16 = (f32) => {
+        const out = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+            const v = Math.max(-1, Math.min(1, f32[i]));
+            out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+        }
+        return out;
+    };
+    const left16 = toInt16(leftF32);
+    const right16 = rightF32 ? toInt16(rightF32) : null;
+
+    const encoder = new window.lamejs.Mp3Encoder(channels, sampleRate, kbps);
+    const blockSize = 1152;
+    const chunks = [];
+    for (let i = 0; i < left16.length; i += blockSize) {
+        const l = left16.subarray(i, i + blockSize);
+        const r = right16 ? right16.subarray(i, i + blockSize) : undefined;
+        const buf = encoder.encodeBuffer(l, r);
+        if (buf.length > 0) chunks.push(new Uint8Array(buf));
+        if (i % (blockSize * 400) === 0 && i > 0) {
+            const pct = Math.round((i / left16.length) * 100);
+            showNotification(`正在转码 MP3… ${pct}%`, "info");
+        }
+    }
+    const tail = encoder.flush();
+    if (tail.length > 0) chunks.push(new Uint8Array(tail));
+
+    const blob = new Blob(chunks, { type: "audio/mpeg" });
+    const artistText = Array.isArray(song.artist) ? song.artist.join("、") : (song.artist || "");
+    const baseName = `${song.name || "audio"}${artistText ? " - " + artistText : ""}`.replace(/[\/:*?"<>|]/g, "_");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${baseName}.mp3`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30000);
+    showNotification("MP3 下载已开始", "success");
+}
+
 // 修复：下载歌曲
 async function downloadSong(song, quality = "320") {
     try {
         if (song && song.source === "youtube") {
-            showNotification("YouTube Music 曲目由官方播放器流式播放，不支持下载", "warning");
-            return;
+            return await downloadYouTubeAsMp3(song, quality);
         }
         showNotification("正在准备下载...");
 

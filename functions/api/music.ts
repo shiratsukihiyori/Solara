@@ -215,6 +215,19 @@ async function youtubeResolveAudio(videoId: string): Promise<string> {
   const cached = ytUrlCache.get(videoId);
   if (cached && cached.expires > Date.now()) return cached.url;
 
+  // 边缘缓存：跨 isolate 复用取票结果，显著降低 YouTube 取票频率
+  const cacheKey = new Request(`https://yt-mint.internal/${encodeURIComponent(videoId)}`);
+  try {
+    const hit = await caches.default.match(cacheKey);
+    if (hit) {
+      const data = await hit.json();
+      if (data?.url) {
+        ytUrlCache.set(videoId, { url: data.url, expires: Date.now() + 10 * 60_000 });
+        return data.url;
+      }
+    }
+  } catch {}
+
   const attempt = async (visitor: string) => {
     const res = await fetchWithTimeout(
       "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
@@ -248,17 +261,27 @@ async function youtubeResolveAudio(videoId: string): Promise<string> {
     return String(m4a.url);
   };
 
-  try {
-    const url = await attempt(await getYouTubeVisitor());
-    ytUrlCache.set(videoId, { url, expires: Date.now() + 30 * 60_000 });
-    return url;
-  } catch {
-    // visitorData 失效时刷新一次
-    ytmVisitor = { data: "", expires: 0 };
-    const url = await attempt(await getYouTubeVisitor());
-    ytUrlCache.set(videoId, { url, expires: Date.now() + 30 * 60_000 });
-    return url;
+  let lastError: any = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const url = await attempt(await getYouTubeVisitor());
+      ytUrlCache.set(videoId, { url, expires: Date.now() + 30 * 60_000 });
+      try {
+        await caches.default.put(
+          cacheKey,
+          new Response(JSON.stringify({ url }), {
+            headers: { "content-type": "application/json", "cache-control": "public, max-age=1800" },
+          })
+        );
+      } catch {}
+      return url;
+    } catch (e) {
+      lastError = e;
+      ytmVisitor = { data: "", expires: 0 };
+      await new Promise((resolve) => setTimeout(resolve, 300 + i * 500));
+    }
   }
+  throw lastError || new Error("mint failed");
 }
 
 
@@ -449,6 +472,7 @@ export async function onRequest(context: any): Promise<Response> {
 
   try {
     // 图片中转不依赖音源，先行处理
+
 
 if (type === "img") {
       const pic = url.searchParams.get("u") || "";
