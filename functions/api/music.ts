@@ -178,6 +178,8 @@ const YTM_CLIENT_VERSION = "1.20241127.01.00";
 // 服务器兜底线路（东京 VPS 上的 yt-dlp 解析服务）
 const YT_AUDIO_BASE_DEFAULT = "http://14.137.255.43.nip.io:8931";
 
+const ytUrlCache = new Map<string, { url: string; expires: number }>();
+
 function ytAudioConfig(env: any): { base: string; key: string } {
   const base = String(env?.YT_AUDIO_BASE || YT_AUDIO_BASE_DEFAULT).replace(/\/+$/, "");
   const key = String(env?.YT_AUDIO_KEY || "");
@@ -419,6 +421,30 @@ if (type === "img") {
       if (!id) return jsonResponse({ error: "missing id" }, 400);
       if (source === "youtube") {
         const { base, key } = ytAudioConfig(env);
+        // ① VPS 只负责解析地址（小请求），音频由 Worker 直接代理
+        try {
+          const cached = ytUrlCache.get(id);
+          let audioUrl = cached && cached.expires > Date.now() ? cached.url : "";
+          if (!audioUrl) {
+            const r = await fetchWithTimeout(
+              `${base}/v1/url?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`,
+              {},
+              20000
+            );
+            if (r.ok) {
+              const data = await r.json();
+              audioUrl = String(data?.url || "");
+              if (audioUrl) ytUrlCache.set(id, { url: audioUrl, expires: Date.now() + 30 * 60_000 });
+            }
+          }
+          if (audioUrl) {
+            const resp = await streamProxy(audioUrl, request);
+            if (resp.status === 200 || resp.status === 206) return resp;
+          }
+        } catch {
+          // 落到 VPS 全量代理
+        }
+        // ② 兜底：VPS 端全量转发
         const target = `${base}/v1/stream?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`;
         return await streamProxy(target, request);
       }
@@ -456,7 +482,7 @@ if (type === "img") {
       return jsonResponse({ url: `https://i.ytimg.com/vi/${encodeURIComponent(id)}/mqdefault.jpg` });
     }
 
-    if (type === "img") {
+if (type === "img") {
       const pic = url.searchParams.get("u") || "";
       if (!/^https?:\/\//i.test(pic)) return jsonResponse({ error: "bad img" }, 400);
       let referer = "https://www.kuwo.cn/";
