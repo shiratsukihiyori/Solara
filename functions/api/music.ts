@@ -127,6 +127,7 @@ function toLrc(lrclist: any[]): string {
 }
 
 // ---------- Spotify ----------
+// 鉴权链：① Client Credentials（env 配置，正规可靠）→ ② Web Player 匿名 token（官方已封，仅兜底）
 let spotifyTokenCache: { token: string; expiresAt: number } = { token: "", expiresAt: 0 };
 
 function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 8000): Promise<Response> {
@@ -135,8 +136,45 @@ function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 8000): Promi
   return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
-async function getSpotifyToken(): Promise<string | null> {
+async function getClientCredentialsToken(env: any): Promise<string | null> {
+  const clientId = env?.SPOTIFY_CLIENT_ID;
+  const clientSecret = env?.SPOTIFY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  try {
+    const res = await fetchWithTimeout(
+      "https://accounts.spotify.com/api/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: "Basic " + btoa(`${clientId}:${clientSecret}`),
+        },
+        body: "grant_type=client_credentials",
+      },
+      8000
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const token = data?.access_token;
+    if (!token) return null;
+    spotifyTokenCache = {
+      token,
+      expiresAt: Date.now() + (Number(data?.expires_in || 3600) - 60) * 1000,
+    };
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+async function getSpotifyToken(env: any): Promise<string | null> {
   if (spotifyTokenCache.token && Date.now() < spotifyTokenCache.expiresAt) return spotifyTokenCache.token;
+
+  // ① 正式渠道：Client Credentials
+  const ccToken = await getClientCredentialsToken(env);
+  if (ccToken) return ccToken;
+
+  // ② 兜底：Web Player 匿名 token（Spotify 已封锁此接口，通常返回 403）
   try {
     const res = await fetchWithTimeout(
       "https://open.spotify.com/get_access_token?reason=transport&productType=web_player",
@@ -162,9 +200,9 @@ async function getSpotifyToken(): Promise<string | null> {
   }
 }
 
-async function spotifyApi(path: string): Promise<any> {
-  const token = await getSpotifyToken();
-  if (!token) throw new Error("Spotify 鉴权失败（匿名 token 不可用）");
+async function spotifyApi(env: any, path: string): Promise<any> {
+  const token = await getSpotifyToken(env);
+  if (!token) throw new Error("Spotify 鉴权失败：请配置 SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET");
   const res = await fetch(`https://api.spotify.com/v1${path}`, {
     headers: { Authorization: `Bearer ${token}`, "User-Agent": BROWSER_UA },
   });
@@ -172,9 +210,30 @@ async function spotifyApi(path: string): Promise<any> {
   return res.json();
 }
 
-async function spotifySearch(q: string, page: number, count: number): Promise<any[]> {
+// 试听兜底：老接口被封时，从官方 embed 页提取 30 秒试听地址
+async function spotifyEmbedPreview(trackId: string): Promise<string | null> {
+  try {
+    const res = await fetchWithTimeout(
+      `https://open.spotify.com/embed/track/${encodeURIComponent(trackId)}`,
+      { headers: { "User-Agent": BROWSER_UA } },
+      8000
+    );
+    if (!res.ok) return null;
+    const html = await res.text();
+    const quoted = html.match(/"audioPreview":\{"url":"([^"]+)"/);
+    if (quoted) return quoted[1];
+    const bare = html.match(/mp3-preview\/([a-zA-Z0-9]+)/);
+    if (bare) return `https://p.scdn.co/mp3-preview/${bare[1]}`;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function spotifySearch(env: any, q: string, page: number, count: number): Promise<any[]> {
   const offset = Math.max(0, (page || 1) - 1) * count;
   const data = await spotifyApi(
+    env,
     `/search?q=${encodeURIComponent(q)}&type=track&limit=${count}&offset=${offset}`
   );
   const items = Array.isArray(data?.tracks?.items) ? data.tracks.items : [];
@@ -227,7 +286,7 @@ async function streamProxy(target: string, request: Request): Promise<Response> 
 
 // ---------- 主入口 ----------
 export async function onRequest(context: any): Promise<Response> {
-  const { request } = context;
+  const { request, env } = context;
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS });
   }
@@ -249,7 +308,7 @@ export async function onRequest(context: any): Promise<Response> {
       const q = url.searchParams.get("q") || "";
       if (!q.trim()) return jsonResponse({ error: "missing q" }, 400);
       const results =
-        source === "kuwo" ? await kuwoSearch(q, page, count) : await spotifySearch(q, page, count);
+        source === "kuwo" ? await kuwoSearch(q, page, count) : await spotifySearch(env, q, page, count);
       return jsonResponse(results);
     }
 
@@ -260,8 +319,14 @@ export async function onRequest(context: any): Promise<Response> {
           url: `/api/music?type=stream&source=kuwo&id=${encodeURIComponent(id)}&br=${br}`,
         });
       }
-      const track = await spotifyApi(`/tracks/${encodeURIComponent(id)}`);
-      const preview = track?.preview_url;
+      let preview: string | null = null;
+      try {
+        const track = await spotifyApi(env, `/tracks/${encodeURIComponent(id)}`);
+        preview = track?.preview_url || null;
+      } catch {
+        // 未配置凭据时走 embed 兜底
+      }
+      if (!preview) preview = await spotifyEmbedPreview(id);
       if (!preview) return jsonResponse({ error: "该曲目暂无试听片段" }, 404);
       return jsonResponse({
         url: `/api/music?type=stream&source=spotify&id=${encodeURIComponent(id)}`,
@@ -276,8 +341,13 @@ export async function onRequest(context: any): Promise<Response> {
       if (source === "kuwo") {
         target = await kuwoResolveUrl(id, br);
       } else {
-        const track = await spotifyApi(`/tracks/${encodeURIComponent(id)}`);
-        target = track?.preview_url || null;
+        try {
+          const track = await spotifyApi(env, `/tracks/${encodeURIComponent(id)}`);
+          target = track?.preview_url || null;
+        } catch {
+          target = null;
+        }
+        if (!target) target = await spotifyEmbedPreview(id);
       }
       if (!target) return jsonResponse({ error: "no stream url" }, 404);
       return await streamProxy(target, request);
@@ -303,7 +373,7 @@ export async function onRequest(context: any): Promise<Response> {
       let picUrl = id;
       if (id && !/^https?:\/\//i.test(id)) {
         try {
-          const track = await spotifyApi(`/tracks/${encodeURIComponent(id)}`);
+          const track = await spotifyApi(env, `/tracks/${encodeURIComponent(id)}`);
           picUrl = track?.album?.images?.[0]?.url || "";
         } catch {
           picUrl = "";
