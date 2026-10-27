@@ -2766,3 +2766,65 @@ input[type="range"]:hover::-webkit-slider-thumb {
 .dark-mode .genre-quick-btn {
     background: rgba(44, 44, 44, 0.8);
 }
+
+/* ==== YouTube 人机验证弹窗（把验证交回用户浏览器） ==== */
+.yt-verify-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+}
+
+.yt-verify-overlay.show {
+    display: flex;
+}
+
+.yt-verify-box {
+    width: min(560px, 92vw);
+    background: var(--container-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 18px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+    padding: 14px 16px 16px;
+}
+
+.yt-verify-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    color: var(--text-color);
+}
+
+.yt-verify-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary-color);
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.yt-verify-hint {
+    margin: 0 0 10px;
+    font-size: 13px;
+    color: var(--text-secondary-color);
+}
+
+.yt-verify-player {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.yt-verify-player iframe {
+    width: 100% !important;
+    height: 100% !important;
+}

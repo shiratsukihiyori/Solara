@@ -244,6 +244,16 @@ async function _youtubeServerFallback(videoId) {
     try {
         const data = await API.fetchJson(`/api/music?type=url&source=youtube&id=${encodeURIComponent(videoId)}&fallback=1`);
         if (!data || !data.url) throw new Error(data && data.error ? data.error : '服务器线路不可用');
+        // 服务器被 YouTube 判定机器人：交给用户浏览器验证
+        const probe = await fetch(data.url, { headers: { Range: "bytes=0-1023" } });
+        if (!probe.ok) {
+            const info = await probe.json().catch(() => null);
+            if (info && info.needVerify) {
+                showYouTubeVerify(videoId);
+                return;
+            }
+            throw new Error(info && info.error ? info.error : `服务器线路异常 (${probe.status})`);
+        }
         _realAudio.src = data.url;
         _realAudio.load();
         try { await _realAudio.play(); } catch (_) {}
@@ -252,8 +262,53 @@ async function _youtubeServerFallback(videoId) {
         }
     } catch (error) {
         console.error('YouTube 服务器兜底失败', error);
-        _emitMedia('error');
+        // 服务器被 YouTube 风控拦截：把验证交回用户浏览器
+        showYouTubeVerify(videoId);
     }
+}
+
+// 在用户浏览器里显示可见的 YouTube 播放器，让用户自行完成人机验证/登录后再播放
+function showYouTubeVerify(videoId) {
+    let panel = document.getElementById('ytVerifyPanel');
+    if (!panel) {
+        panel = document.createElement('div');
+        panel.id = 'ytVerifyPanel';
+        panel.className = 'yt-verify-overlay';
+        panel.innerHTML = `
+            <div class="yt-verify-box">
+                <div class="yt-verify-head">
+                    <strong>YouTube 需要验证</strong>
+                    <button type="button" class="yt-verify-close" aria-label="关闭">×</button>
+                </div>
+                <p class="yt-verify-hint">服务器线路被 YouTube 风控拦截。请在下方的官方播放器里完成验证（如有）并点击播放。</p>
+                <div id="ytVerifyHost" class="yt-verify-player"></div>
+            </div>
+        `;
+        document.body.appendChild(panel);
+        panel.querySelector('.yt-verify-close').addEventListener('click', () => {
+            try { _ytBridge.player?.pauseVideo?.(); } catch (_) {}
+            panel.classList.remove('show');
+        });
+    }
+    panel.classList.add('show');
+    panel.dataset.videoId = videoId;
+
+    const host = panel.querySelector('#ytVerifyHost');
+    host.innerHTML = '';
+    try { _ytBridge.player?.destroy?.(); } catch (_) {}
+    _ytBridge.player = null;
+    _ytBridge.ready = false;
+    _ytBridge.mode = true;
+    _ytBridge.videoId = videoId;
+    _ytBridge.ended = false;
+
+    // 直接使用官方 embed iframe（不依赖 IFrame API，加载失败也能显示）
+    const iframe = document.createElement('iframe');
+    iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&rel=0&playsinline=1`;
+    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
+    iframe.allowFullscreen = true;
+    iframe.style.cssText = 'width:100%;height:100%;border:0;';
+    host.appendChild(iframe);
 }
 
 function _stopYouTubePlayback() {

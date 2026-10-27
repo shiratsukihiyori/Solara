@@ -255,7 +255,11 @@ async function youtubeResolveAudio(videoId: string): Promise<string> {
     const audios = formats.filter(
       (f: any) => String(f.mimeType || "").startsWith("audio") && f.url
     );
-    if (!audios.length) throw new Error(`no audio (${status})`);
+    if (!audios.length) {
+      const err: any = new Error(`no audio (${status})`);
+      err.botCheck = status === "LOGIN_REQUIRED";
+      throw err;
+    }
     audios.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
     const m4a = audios.find((f: any) => String(f.mimeType).includes("mp4")) || audios[0];
     return String(m4a.url);
@@ -661,17 +665,21 @@ if (type === "img") {
       if (!id) return jsonResponse({ error: "missing id" }, 400);
       if (source === "youtube") {
         // ① Worker 自己取票（VISIONOS 客户端 + visitorData），失败自动重试一次
+        let lastBotCheck = false;
         for (let attempt = 0; attempt < 2; attempt++) {
           try {
             const audioUrl = await youtubeResolveAudio(id);
             const resp = await streamProxy(audioUrl, request);
             if (resp.status === 200 || resp.status === 206) return resp;
-          } catch {
-            // 继续重试
+          } catch (error: any) {
+            if (error && error.botCheck) lastBotCheck = true;
           }
           ytUrlCache.delete(id);
           ytmVisitor = { data: "", expires: 0 };
           if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 200));
+        }
+        if (lastBotCheck) {
+          return jsonResponse({ error: "youtube_bot_check", needVerify: true }, 403);
         }
         return jsonResponse({ error: "音频解析失败，请稍后重试" }, 502);
       }
