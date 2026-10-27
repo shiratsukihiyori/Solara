@@ -6280,7 +6280,7 @@ function playNext() {
             }
             state._heartbeatLoading = true;
             debugLog(`[心跳] 触发补充，genre=${state.lastRadarGenre}`);
-            exploreOnlineMusic(state.lastRadarGenre).finally(() => {
+            heartbeatFillSimilar().finally(() => {
                 state._heartbeatLoading = false;
                 debugLog(`[心跳] 补充完成`);
                 // 如果心跳加载期间播放停在了末尾，补完后自动继续
@@ -6672,15 +6672,7 @@ async function exploreOnlineMusic(genre) {
         if (!state._radarFallbacking && genre) {
             state._radarFallbacking = true;
             try {
-                // 1. 自定义歌单
-                const customIds = state.radarSettings && state.radarSettings.fallbackPlaylistIds;
-                if (Array.isArray(customIds) && customIds.length > 0) {
-                    if (await tryPlaylistFallback(customIds)) {
-                        return;
-                    }
-                }
-
-                // 2. 动态搜索歌单
+                // 1. 动态搜索歌单
                 const dynamicId = await API.searchPlaylist(randomGenre);
                 if (dynamicId) {
                     debugLog(`探索雷达动态搜到歌单: ${dynamicId}`);
@@ -6707,6 +6699,53 @@ async function exploreOnlineMusic(genre) {
     } finally {
         setLoadingState(false);
     }
+}
+
+// 心动模式：按当前歌曲补充同歌手/同风格歌曲（参考主流播放器的电台逻辑）
+async function heartbeatFillSimilar() {
+    const cur = state.currentSong;
+    if (!cur) return;
+    const artists = Array.isArray(cur.artist) ? cur.artist : String(cur.artist || "").split(/[,，、&/]/);
+    const artistName = String(artists[0] || "").trim();
+    const existing = new Set((state.playlistSongs || []).map((song) => getSongKey(song)).filter(Boolean));
+    let picked = [];
+
+    if (artistName) {
+        try {
+            const res = await API.search(artistName, "netease", 30, 1);
+            const list = (res || []).filter((song) => {
+                const names = Array.isArray(song.artist) ? song.artist.join(" ") : String(song.artist || "");
+                return names.includes(artistName) && !existing.has(getSongKey(song));
+            });
+            picked = picked.concat(shuffleArray(list).slice(0, 10));
+            debugLog(`[心跳] 同歌手补充 ${picked.length} 首 (${artistName})`);
+        } catch (error) {
+            debugLog(`[心跳] 同歌手搜索失败: ${error.message}`);
+        }
+    }
+
+    if (picked.length < 5) {
+        const genre = state.lastRadarGenre || pickRandomExploreGenre();
+        try {
+            const res = await API.search(genre, "netease", 30, 1);
+            const extra = (res || []).filter((song) => !existing.has(getSongKey(song)));
+            picked = picked.concat(shuffleArray(extra).slice(0, 10 - picked.length));
+            debugLog(`[心跳] 同风格补充至 ${picked.length} 首 (${genre})`);
+        } catch (error) {
+            debugLog(`[心跳] 同风格搜索失败: ${error.message}`);
+        }
+    }
+
+    if (picked.length === 0) {
+        showNotification("心动模式：没有找到可补充的歌曲", "warning");
+        return;
+    }
+
+    state.playlistSongs = (state.playlistSongs || []).concat(picked);
+    state.onlineSongs = state.playlistSongs.slice();
+    renderPlaylist();
+    updatePlaylistHighlight();
+    showNotification(`心动模式：已补充 ${picked.length} 首相似歌曲`, "success");
 }
 
 // 修复：加载歌词
@@ -7144,6 +7183,16 @@ function initSettings() {
     if (dom.saveSettingsBtn) {
         dom.saveSettingsBtn.addEventListener("click", saveSettings);
     }
+
+    document.querySelectorAll(".genre-quick-btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+            if (!dom.radarGenreList) return;
+            const action = btn.dataset.genreAction;
+            dom.radarGenreList.querySelectorAll("input[type='checkbox']").forEach((cb) => {
+                cb.checked = action === "all";
+            });
+        });
+    });
     // 绑定齿轮图标按钮
     const openBtn = dom.openSettingsBtn || document.getElementById("openSettingsBtn");
     if (openBtn) {
@@ -7199,15 +7248,10 @@ async function saveSettings() {
     }
 
     const heartbeatMode = dom.heartbeatModeCheckbox ? dom.heartbeatModeCheckbox.checked : false;
-    const fallbackIdsRaw = dom.fallbackPlaylistIds ? dom.fallbackPlaylistIds.value.trim() : "";
-    const fallbackIds = fallbackIdsRaw
-        ? fallbackIdsRaw.split(/\n|,/).map(s => s.trim()).filter(id => /^\d+$/.test(id))
-        : [];
 
     state.radarSettings = {
         genres: selectedGenres,
-        heartbeatMode: heartbeatMode,
-        fallbackPlaylistIds: fallbackIds.length > 0 ? fallbackIds : undefined
+        heartbeatMode: heartbeatMode
     };
     state.heartbeatMode = heartbeatMode;
 
@@ -7248,6 +7292,7 @@ async function loadCustomPlaylist() {
         showNotification("请输入歌单 ID 或网易云歌单链接", "warning");
         return;
     }
+    safeSetLocalStorage("neteasePlaylistInput", raw);
     const btn = dom.loadCustomPlaylistBtn;
     if (btn) {
         btn.disabled = true;
@@ -7324,8 +7369,8 @@ function applySettingsToUI() {
     }
 
     if (dom.fallbackPlaylistIds) {
-        const ids = state.radarSettings.fallbackPlaylistIds;
-        dom.fallbackPlaylistIds.value = Array.isArray(ids) && ids.length > 0 ? ids.join("\n") : "";
+        const savedInput = safeGetLocalStorage("neteasePlaylistInput");
+        if (savedInput) dom.fallbackPlaylistIds.value = savedInput;
     }
 }
 

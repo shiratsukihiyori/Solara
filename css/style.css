@@ -2739,3 +2739,30 @@ input[type="range"]::-webkit-slider-thumb {
 input[type="range"]:hover::-webkit-slider-thumb {
     transform: scale(1.15);
 }
+
+/* ==== 设置面板：风格快捷选择 ==== */
+.genre-quick-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.genre-quick-btn {
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: var(--component-bg);
+    color: var(--text-secondary-color);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.genre-quick-btn:hover {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.dark-mode .genre-quick-btn {
+    background: rgba(44, 44, 44, 0.8);
+}

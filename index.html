@@ -546,6 +546,10 @@
             <section class="settings-section">
                 <h3>探索雷达风格</h3>
                 <p class="settings-hint">选择您喜欢的音乐风格，探索雷达将从中为您推荐歌曲。</p>
+                <div class="genre-quick-actions">
+                    <button type="button" class="genre-quick-btn" data-genre-action="all">全选</button>
+                    <button type="button" class="genre-quick-btn" data-genre-action="none">清空</button>
+                </div>
                 <div id="radarGenreList" class="genre-grid">
                     <!-- 风格复选框将通过 JS 动态生成 -->
                 </div>
@@ -558,13 +562,13 @@
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
-                <p class="settings-hint">开启后，探索雷达将在歌曲即将播放完毕时自动补充同风格歌曲，不间断推送。</p>
+                <p class="settings-hint">开启后，播放列表快播完时，会按当前歌曲自动补充同歌手/同风格歌曲，保持不间断播放。</p>
             </section>
             <section class="settings-section">
-                <h3>自定义预设歌单</h3>
-                <p class="settings-hint">当搜索不到结果时，依次尝试以下网易云歌单 ID 兜底。每行一个，留空使用默认歌单。</p>
-                <textarea id="fallbackPlaylistIds" class="settings-textarea" rows="4" placeholder="每行一个歌单ID，例如：&#10;3778678"></textarea>
-                <button id="loadCustomPlaylistBtn" class="load-custom-playlist-btn">直接播放</button>
+                <h3>网易云歌单</h3>
+                <p class="settings-hint">粘贴网易云歌单 ID 或分享链接（支持多个，每行一个），加载到播放列表并从第一首开始播放。</p>
+                <textarea id="fallbackPlaylistIds" class="settings-textarea" rows="3" placeholder="歌单 ID 或链接，例如：&#10;3778678&#10;https://music.163.com/playlist?id=3778678"></textarea>
+                <button id="loadCustomPlaylistBtn" class="load-custom-playlist-btn">加载并播放</button>
             </section>
         </div>
         <div class="modal-footer">
