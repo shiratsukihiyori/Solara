@@ -43,18 +43,18 @@ function parseSingleQuotedJson(raw: string): any {
   return JSON.parse(text);
 }
 
-// ---------- 酷我 ----------
-async function kuwoSearch(q: string, page: number, count: number): Promise<any[]> {
-  const pn = Math.max(0, (page || 1) - 1);
-  const url =
-    `https://search.kuwo.cn/r.s?all=${encodeURIComponent(q)}&ft=music&itemset=web_2013` +
-    `&client=kt&pn=${pn}&rn=${count}&rformat=json&encoding=utf8`;
-  const res = await fetch(url, {
-    headers: { "User-Agent": BROWSER_UA, "Referer": "https://www.kuwo.cn/" },
-  });
-  const data = parseSingleQuotedJson(await res.text());
-  const list = Array.isArray(data?.abslist) ? data.abslist : [];
-  return list
+// 兼容两种返回：现代接口是标准 JSON，旧接口是单引号对象
+function parseKuwoJson(raw: string): any {
+  const text = String(raw || "").trim().replace(/^var\s+[\w$]+\s*=\s*/, "").replace(/;+\s*$/, "");
+  try {
+    return JSON.parse(text);
+  } catch {
+    return parseSingleQuotedJson(text);
+  }
+}
+
+function mapKuwoList(list: any[]): any[] {
+  return (Array.isArray(list) ? list : [])
     .map((song: any) => {
       const rid = String(
         song.DC_TARGETID || String(song.MUSICRID || "").replace("MUSIC_", "") || ""
@@ -63,18 +63,56 @@ async function kuwoSearch(q: string, page: number, count: number): Promise<any[]
         .split(/&|\//)
         .map((s) => s.trim())
         .filter(Boolean);
+      const cover = String(song.web_albumpic_short || song.web_artistpic_short || "").trim();
       return {
         id: rid,
         name: decodeEntities(String(song.SONGNAME || song.NAME || "")),
         artist: artists.length ? artists : ["未知歌手"],
         album: decodeEntities(String(song.ALBUM || "")),
-        pic_id: rid,
+        pic_id: cover || rid,
         url_id: rid,
         lyric_id: rid,
         source: "kuwo",
+        cover_path: cover,
       };
     })
     .filter((s: any) => s.id && s.name);
+}
+
+// ---------- 酷我 ----------
+async function kuwoSearch(q: string, page: number, count: number): Promise<any[]> {
+  const pn = Math.max(0, (page || 1) - 1);
+
+  // ① 现代完整索引接口（免登录，返回标准 JSON，结果最全）
+  try {
+    const modern =
+      `https://www.kuwo.cn/search/searchMusicBykeyWord?vipver=1&client=kt&ft=music&cluster=0` +
+      `&strategy=2012&encoding=utf8&rformat=json&mobi=1&issubtitle=1&show_copyright_off=1` +
+      `&pn=${pn}&rn=${count}&all=${encodeURIComponent(q)}`;
+    const res = await fetch(modern, {
+      headers: {
+        "User-Agent": BROWSER_UA,
+        "Referer": `https://www.kuwo.cn/search/list?key=${encodeURIComponent(q)}`,
+      },
+    });
+    if (res.ok) {
+      const data = parseKuwoJson(await res.text());
+      const mapped = mapKuwoList(data?.abslist || []);
+      if (mapped.length > 0) return mapped;
+    }
+  } catch {
+    // 落回旧接口
+  }
+
+  // ② 旧接口兜底（索引较旧，可能缺歌）
+  const legacy =
+    `https://search.kuwo.cn/r.s?all=${encodeURIComponent(q)}&ft=music&itemset=web_2013` +
+    `&client=kt&pn=${pn}&rn=${count}&rformat=json&encoding=utf8`;
+  const res = await fetch(legacy, {
+    headers: { "User-Agent": BROWSER_UA, "Referer": "https://www.kuwo.cn/" },
+  });
+  const data = parseKuwoJson(await res.text());
+  return mapKuwoList(data?.abslist || []);
 }
 
 async function kuwoResolveUrl(id: string, br: string): Promise<string | null> {
@@ -104,7 +142,7 @@ async function kuwoResolveUrl(id: string, br: string): Promise<string | null> {
 async function kuwoSongInfo(id: string): Promise<any> {
   try {
     const res = await fetch(
-      `https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=${encodeURIComponent(id)}`,
+      `https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=${encodeURIComponent(id)}&httpsStatus=1`,
       { headers: { "User-Agent": BROWSER_UA, "Referer": "https://m.kuwo.cn/" } }
     );
     return await res.json();
@@ -364,6 +402,12 @@ export async function onRequest(context: any): Promise<Response> {
 
     if (type === "pic") {
       if (source === "kuwo") {
+        // pic_id 若是封面路径（形如 120/s4s7/41/xxx.jpg）直接用官方封面 CDN
+        if (/\.(jpg|jpeg|png|webp)$/i.test(id)) {
+          return jsonResponse({
+            url: `/api/music?type=img&u=${encodeURIComponent("https://img1.kuwo.cn/star/albumcover/" + id)}`,
+          });
+        }
         const data = await kuwoSongInfo(id);
         const pic = data?.data?.songinfo?.pic || "";
         if (!pic) return jsonResponse({ url: "" });
