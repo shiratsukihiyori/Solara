@@ -315,16 +315,21 @@ function showYouTubeVerify(videoId) {
 
     probeYouTubeReachable().then((reachable) => {
         if (!reachable) {
-            host.innerHTML = '';
             if (hintEl) {
-                hintEl.innerHTML = '当前网络无法访问 YouTube（本机既连不上直连线路，服务器线路又被 YouTube 风控拦截）。<br>请开启代理后重试，或切换到「网易云 / 酷我 / 哔哩哔哩」音源。';
+                hintEl.textContent = '直连不可用，已通过服务器代理加载官方播放器。若出现图片验证（类似 Steam 的九宫格），完成后点播放即可。';
             }
+            mountEmbed(true);
             return;
         }
-        mountEmbed();
+        mountEmbed(false);
     });
 
-    const mountEmbed = () => {
+    const mountEmbed = (useProxy) => {
+        if (hintEl) {
+            hintEl.textContent = useProxy
+                ? '已通过服务器代理加载官方播放器。若出现验证提示，按页面指引完成即可；请勿在此输入 Google 账号密码。'
+                : '请在下方的官方播放器里完成验证（如有）并点击播放。';
+        }
     host.innerHTML = '';
     try { _ytBridge.player?.destroy?.(); } catch (_) {}
     _ytBridge.player = null;
@@ -337,7 +342,9 @@ function showYouTubeVerify(videoId) {
     }
     // 直接使用官方 embed iframe（不依赖 IFrame API，加载失败也能显示）
     const iframe = document.createElement('iframe');
-    iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&rel=0&playsinline=1`;
+    iframe.src = useProxy
+        ? `/embed/${encodeURIComponent(videoId)}`
+        : `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&rel=0&playsinline=1`;
     iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture';
     iframe.allowFullscreen = true;
     iframe.style.cssText = 'width:100%;height:100%;border:0;';
