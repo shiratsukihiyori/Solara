@@ -177,12 +177,22 @@ function _stopYouTubePoll() {
 async function _loadYouTubeVideo(videoId) {
     _ytBridge.mode = true;
     _ytBridge.videoId = videoId;
+    _ytBridge.fallbackFor = null;
     _ytBridge.ended = false;
     _ytBridge.lastState = -1;
     try { _realAudio.pause(); } catch (_) {}
     try { _realAudio.removeAttribute('src'); } catch (_) {}
 
-    const YT = await _loadYouTubeApi();
+    let YT;
+    try {
+        YT = await Promise.race([
+            _loadYouTubeApi(),
+            new Promise((_, reject) => window.setTimeout(() => reject(new Error('YouTube 脚本加载超时')), 10000)),
+        ]);
+    } catch (error) {
+        console.warn('YouTube 直连不可用，切换服务器线路', error);
+        return _youtubeServerFallback(videoId);
+    }
 
     if (_ytBridge.player && _ytBridge.ready) {
         try {
@@ -219,12 +229,31 @@ async function _loadYouTubeVideo(videoId) {
                     resolve();
                 },
                 onError: () => {
-                    window.setTimeout(() => _emitMedia('error'), 0);
+                    _youtubeServerFallback(videoId);
                 },
             },
         });
         window.setTimeout(resolve, 15000);
     });
+}
+
+async function _youtubeServerFallback(videoId) {
+    if (!videoId || _ytBridge.fallbackFor === videoId) return;
+    _ytBridge.fallbackFor = videoId;
+    _stopYouTubePlayback();
+    try {
+        const data = await API.fetchJson(`/api/music?type=url&source=youtube&id=${encodeURIComponent(videoId)}&fallback=1`);
+        if (!data || !data.url) throw new Error(data && data.error ? data.error : '服务器线路不可用');
+        _realAudio.src = data.url;
+        _realAudio.load();
+        try { await _realAudio.play(); } catch (_) {}
+        if (typeof showNotification === 'function') {
+            showNotification('YouTube 直连不可用，已切换到服务器线路', 'warning');
+        }
+    } catch (error) {
+        console.error('YouTube 服务器兜底失败', error);
+        _emitMedia('error');
+    }
 }
 
 function _stopYouTubePlayback() {

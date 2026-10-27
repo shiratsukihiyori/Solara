@@ -175,6 +175,15 @@ function toLrc(lrclist: any[]): string {
 // ---------- YouTube Music ----------
 const YTM_CLIENT_VERSION = "1.20241127.01.00";
 
+// 服务器兜底线路（东京 VPS 上的 yt-dlp 解析服务）
+const YT_AUDIO_BASE_DEFAULT = "http://14.137.255.43.nip.io:8931";
+
+function ytAudioConfig(env: any): { base: string; key: string } {
+  const base = String(env?.YT_AUDIO_BASE || YT_AUDIO_BASE_DEFAULT).replace(/\/+$/, "");
+  const key = String(env?.YT_AUDIO_KEY || "");
+  return { base, key };
+}
+
 function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 12000): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), ms);
@@ -362,7 +371,7 @@ export async function onRequest(context: any): Promise<Response> {
 
   try {
     // 图片中转不依赖音源，先行处理
-    if (type === "img") {
+if (type === "img") {
       const pic = url.searchParams.get("u") || "";
       if (!/^https?:\/\//i.test(pic)) return jsonResponse({ error: "bad img" }, 400);
       let referer = "https://www.kuwo.cn/";
@@ -396,14 +405,22 @@ export async function onRequest(context: any): Promise<Response> {
           url: `/api/music?type=stream&source=kuwo&id=${encodeURIComponent(id)}&br=${br}`,
         });
       }
-      // YouTube Music：整首播放走官方 IFrame 播放器，前端用 yt: 前缀切换播放后端
+      // YouTube Music：默认整首走官方 IFrame；fallback=1 时返回服务器兜底线路
+      if (url.searchParams.get("fallback") === "1") {
+        return jsonResponse({
+          url: `/api/music?type=stream&source=youtube&id=${encodeURIComponent(id)}`,
+          fallback: true,
+        });
+      }
       return jsonResponse({ url: `yt:${id}`, playable: "iframe" });
     }
 
     if (type === "stream") {
       if (!id) return jsonResponse({ error: "missing id" }, 400);
       if (source === "youtube") {
-        return jsonResponse({ error: "youtube 整曲由官方播放器承载，无直链音频" }, 400);
+        const { base, key } = ytAudioConfig(env);
+        const target = `${base}/v1/stream?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`;
+        return await streamProxy(target, request);
       }
       let target: string | null = null;
       target = await kuwoResolveUrl(id, br);
