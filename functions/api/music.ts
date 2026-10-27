@@ -180,6 +180,89 @@ const YT_AUDIO_BASE_DEFAULT = "http://14.137.255.43.nip.io:8931";
 
 const ytUrlCache = new Map<string, { url: string; expires: number }>();
 
+const VISIONOS_CLIENT = {
+  clientName: "VISIONOS",
+  clientVersion: "1.02",
+  deviceMake: "Apple",
+  deviceModel: "RealityDevice17,1",
+  userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+  osName: "visionOS",
+  osVersion: "26.5.23O471",
+  hl: "en",
+  gl: "US",
+};
+
+let ytmVisitor: { data: string; expires: number } = { data: "", expires: 0 };
+
+async function getYouTubeVisitor(): Promise<string> {
+  if (ytmVisitor.data && ytmVisitor.expires > Date.now()) return ytmVisitor.data;
+  const res = await fetchWithTimeout(
+    "https://www.youtube.com/youtubei/v1/visitor_id?prettyPrint=false",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": BROWSER_UA },
+      body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20241126.01.00" } } }),
+    },
+    10000
+  );
+  if (!res.ok) throw new Error(`visitor_id ${res.status}`);
+  const data = await res.json();
+  const visitor = String(data?.responseContext?.visitorData || "");
+  if (!visitor) throw new Error("empty visitorData");
+  ytmVisitor = { data: visitor, expires: Date.now() + 6 * 3600_000 };
+  return visitor;
+}
+
+async function youtubeResolveAudio(videoId: string): Promise<string> {
+  const cached = ytUrlCache.get(videoId);
+  if (cached && cached.expires > Date.now()) return cached.url;
+
+  const attempt = async (visitor: string) => {
+    const res = await fetchWithTimeout(
+      "https://www.youtube.com/youtubei/v1/player?prettyPrint=false",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": BROWSER_UA,
+          "x-goog-visitor-id": visitor,
+          origin: "https://www.youtube.com",
+        },
+        body: JSON.stringify({
+          context: { client: { ...VISIONOS_CLIENT, visitorData: visitor } },
+          videoId,
+          contentCheckOk: true,
+          racyCheckOk: true,
+        }),
+      },
+      15000
+    );
+    if (!res.ok) throw new Error(`player ${res.status}`);
+    const data = await res.json();
+    const status = String(data?.playabilityStatus?.status || "");
+    const formats = data?.streamingData?.adaptiveFormats || [];
+    const audios = formats.filter(
+      (f: any) => String(f.mimeType || "").startsWith("audio") && f.url
+    );
+    if (!audios.length) throw new Error(`no audio (${status})`);
+    audios.sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+    const m4a = audios.find((f: any) => String(f.mimeType).includes("mp4")) || audios[0];
+    return String(m4a.url);
+  };
+
+  try {
+    const url = await attempt(await getYouTubeVisitor());
+    ytUrlCache.set(videoId, { url, expires: Date.now() + 30 * 60_000 });
+    return url;
+  } catch {
+    // visitorData 失效时刷新一次
+    ytmVisitor = { data: "", expires: 0 };
+    const url = await attempt(await getYouTubeVisitor());
+    ytUrlCache.set(videoId, { url, expires: Date.now() + 30 * 60_000 });
+    return url;
+  }
+}
+
 function ytAudioConfig(env: any): { base: string; key: string } {
   const base = String(env?.YT_AUDIO_BASE || YT_AUDIO_BASE_DEFAULT).replace(/\/+$/, "");
   const key = String(env?.YT_AUDIO_KEY || "");
@@ -373,6 +456,7 @@ export async function onRequest(context: any): Promise<Response> {
 
   try {
     // 图片中转不依赖音源，先行处理
+
 if (type === "img") {
       const pic = url.searchParams.get("u") || "";
       if (!/^https?:\/\//i.test(pic)) return jsonResponse({ error: "bad img" }, 400);
@@ -420,31 +504,22 @@ if (type === "img") {
     if (type === "stream") {
       if (!id) return jsonResponse({ error: "missing id" }, 400);
       if (source === "youtube") {
-        const { base, key } = ytAudioConfig(env);
-        // ① VPS 只负责解析地址（小请求），音频由 Worker 直接代理
-        try {
-          const cached = ytUrlCache.get(id);
-          let audioUrl = cached && cached.expires > Date.now() ? cached.url : "";
-          if (!audioUrl) {
-            const r = await fetchWithTimeout(
-              `${base}/v1/url?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`,
-              {},
-              20000
-            );
-            if (r.ok) {
-              const data = await r.json();
-              audioUrl = String(data?.url || "");
-              if (audioUrl) ytUrlCache.set(id, { url: audioUrl, expires: Date.now() + 30 * 60_000 });
-            }
-          }
-          if (audioUrl) {
+        // ① Worker 自己取票（VISIONOS 客户端 + visitorData），失败自动重试一次
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const audioUrl = await youtubeResolveAudio(id);
             const resp = await streamProxy(audioUrl, request);
             if (resp.status === 200 || resp.status === 206) return resp;
+          } catch {
+            // 继续重试
           }
-        } catch {
-          // 落到 VPS 全量代理
+          ytUrlCache.delete(id);
+          ytmVisitor = { data: "", expires: 0 };
+          if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 200));
         }
-        // ② 兜底：VPS 端全量转发
+        // ② 落到 VPS 备份线路
+        // ② 备份：VPS 取票 + 全量转发
+        const { base, key } = ytAudioConfig(env);
         const target = `${base}/v1/stream?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`;
         return await streamProxy(target, request);
       }
