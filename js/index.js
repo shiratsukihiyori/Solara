@@ -854,6 +854,19 @@ const API = {
     },
 
     fetchJson: async (url) => {
+        // 同源适配层（酷我 / Spotify）直接走 fetch
+        if (typeof url === "string" && url.startsWith("/")) {
+            const response = await fetch(url, {
+                headers: { "Accept": "application/json" },
+                credentials: "same-origin",
+            });
+            if (!response.ok) {
+                let detail = "";
+                try { detail = (await response.json())?.error || ""; } catch (e) {}
+                throw new Error(detail || `API ${response.status}`);
+            }
+            return await response.json();
+        }
         try {
             return await API._fetchJsonp(url);
         } catch (jsonpError) {
@@ -869,6 +882,24 @@ const API = {
     },
 
     search: async (keyword, source = "netease", count = 20, page = 1) => {
+        // 酷我 / Spotify 走同源适配层
+        if (source === "kuwo" || source === "spotify") {
+            const data = await API.fetchJson(
+                `/api/music?type=search&source=${source}&q=${encodeURIComponent(keyword)}&count=${count}&page=${page}`
+            );
+            if (!Array.isArray(data)) throw new Error(data?.error || "搜索结果格式错误");
+            return data.map(song => ({
+                id: song.id,
+                name: song.name,
+                artist: song.artist,
+                album: song.album,
+                pic_id: song.pic_id,
+                url_id: song.url_id,
+                lyric_id: song.lyric_id,
+                source: song.source,
+                preview: !!song.preview,
+            }));
+        }
         const signature = API.generateSignature();
         const url = `${API.baseUrl}?types=search&source=${source}&name=${encodeURIComponent(keyword)}&count=${count}&pages=${page}&s=${signature}`;
 
@@ -949,18 +980,30 @@ const API = {
     },
 
     getSongUrl: (song, quality = "320") => {
+        const src = song.source || "netease";
+        if (src === "kuwo" || src === "spotify") {
+            return `/api/music?type=url&source=${src}&id=${encodeURIComponent(song.url_id || song.id)}&br=${quality}`;
+        }
         const signature = API.generateSignature();
-        return `${API.baseUrl}?types=url&id=${song.id}&source=${song.source || "netease"}&br=${quality}&s=${signature}`;
+        return `${API.baseUrl}?types=url&id=${song.id}&source=${src}&br=${quality}&s=${signature}`;
     },
 
     getLyric: (song) => {
+        const src = song.source || "netease";
+        if (src === "kuwo" || src === "spotify") {
+            return `/api/music?type=lyric&source=${src}&id=${encodeURIComponent(song.lyric_id || song.id)}`;
+        }
         const signature = API.generateSignature();
-        return `${API.baseUrl}?types=lyric&id=${song.lyric_id || song.id}&source=${song.source || "netease"}&s=${signature}`;
+        return `${API.baseUrl}?types=lyric&id=${song.lyric_id || song.id}&source=${src}&s=${signature}`;
     },
 
     getPicUrl: (song) => {
+        const src = song.source || "netease";
+        if (src === "kuwo" || src === "spotify") {
+            return `/api/music?type=pic&source=${src}&id=${encodeURIComponent(song.pic_id || song.id)}`;
+        }
         const signature = API.generateSignature();
-        return `${API.baseUrl}?types=pic&id=${song.pic_id}&source=${song.source || "netease"}&size=300&s=${signature}`;
+        return `${API.baseUrl}?types=pic&id=${song.pic_id}&source=${src}&size=300&s=${signature}`;
     },
 
     searchPlaylist: async (keyword, limit = 30) => {
@@ -3988,6 +4031,9 @@ function updateCurrentSongInfo(song, options = {}) {
         API.fetchJson(picUrl)
             .then(data => {
                 if (!data || !data.url) {
+                    dom.albumCover.classList.remove("loading");
+                    // 酷我 / Spotify 无封面时静默回退到占位图，不报错
+                    if (song.source === "kuwo" || song.source === "spotify") return;
                     throw new Error("封面地址缺失");
                 }
 
@@ -4189,6 +4235,17 @@ function createSearchResultItem(song, index) {
     const title = document.createElement("div");
     title.className = "search-result-title";
     title.textContent = song.name || "未知歌曲";
+
+    // Spotify 来源：标注 30 秒官方试听
+    if (song.preview || song.source === "spotify") {
+        const badge = document.createElement("span");
+        badge.className = "search-result-badge";
+        badge.textContent = "30s 试听";
+        title.appendChild(badge);
+    }
+
+    // 交错入场延迟
+    item.style.animationDelay = `${Math.min(index, 12) * 30}ms`;
 
     const artist = document.createElement("div");
     artist.className = "search-result-artist";

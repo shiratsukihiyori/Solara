@@ -2635,3 +2635,107 @@ input[type="range"] {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+/* ============================================================
+   Solara 动效增强包
+   —— 搜索结果交错入场 / 试听徽章 / 播放中呼吸封面 / 均衡器 / 微交互
+   ============================================================ */
+
+/* 搜索结果：交错滑入 */
+.search-result-item {
+    animation: sr-item-in 0.45s cubic-bezier(0.22, 0.9, 0.35, 1) both;
+}
+
+@keyframes sr-item-in {
+    from { opacity: 0; transform: translateY(10px) scale(0.99); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.search-result-item:hover {
+    background: rgba(255, 255, 255, 0.42);
+    transform: translateX(2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+}
+
+/* “30s 试听”徽章（Spotify） */
+.search-result-badge {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 8px;
+    padding: 2px 8px;
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+    border-radius: 999px;
+    background: rgba(30, 215, 96, 0.16);
+    border: 1px solid rgba(30, 215, 96, 0.45);
+    color: #6fe3a1;
+    vertical-align: middle;
+    animation: badge-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
+}
+
+@keyframes badge-pop {
+    from { opacity: 0; transform: scale(0.6); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* 播放中的封面：呼吸光晕 */
+body.is-playing .album-cover {
+    animation: cover-breathe 3.2s ease-in-out infinite;
+}
+
+@keyframes cover-breathe {
+    0%, 100% { box-shadow: 0 0 0 rgba(80, 220, 180, 0); }
+    50% { box-shadow: 0 0 26px rgba(80, 220, 180, 0.35); }
+}
+
+/* 播放按钮：按下反馈 */
+#playPauseBtn:active { transform: scale(0.92); }
+#playPauseBtn:hover { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
+
+/* 播放器均衡器（标题左侧，播放时才跳动） */
+.player-eq {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 13px;
+    margin-right: 8px;
+    flex: 0 0 auto;
+}
+
+.player-eq i {
+    width: 3px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--success-color, #4ade80);
+    opacity: 0.35;
+    transition: opacity 0.2s;
+}
+
+body.is-playing .player-eq i {
+    opacity: 1;
+    animation: eq-bounce 0.9s ease-in-out infinite;
+}
+
+body.is-playing .player-eq i:nth-child(2) {
+    animation-delay: 0.15s;
+    animation-duration: 0.72s;
+}
+
+body.is-playing .player-eq i:nth-child(3) {
+    animation-delay: 0.3s;
+    animation-duration: 1.05s;
+}
+
+@keyframes eq-bounce {
+    0%, 100% { height: 4px; }
+    50% { height: 13px; }
+}
+
+/* 音量滑块微交互 */
+input[type="range"]::-webkit-slider-thumb {
+    transition: transform 0.2s ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
+}
