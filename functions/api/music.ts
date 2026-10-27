@@ -175,8 +175,6 @@ function toLrc(lrclist: any[]): string {
 // ---------- YouTube Music ----------
 const YTM_CLIENT_VERSION = "1.20241127.01.00";
 
-// 服务器兜底线路（东京 VPS 上的 yt-dlp 解析服务）
-const YT_AUDIO_BASE_DEFAULT = "http://14.137.255.43.nip.io:8931";
 
 const ytUrlCache = new Map<string, { url: string; expires: number }>();
 
@@ -263,11 +261,6 @@ async function youtubeResolveAudio(videoId: string): Promise<string> {
   }
 }
 
-function ytAudioConfig(env: any): { base: string; key: string } {
-  const base = String(env?.YT_AUDIO_BASE || YT_AUDIO_BASE_DEFAULT).replace(/\/+$/, "");
-  const key = String(env?.YT_AUDIO_KEY || "");
-  return { base, key };
-}
 
 function fetchWithTimeout(url: string, init: RequestInit = {}, ms = 12000): Promise<Response> {
   const controller = new AbortController();
@@ -517,11 +510,7 @@ if (type === "img") {
           ytmVisitor = { data: "", expires: 0 };
           if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 200));
         }
-        // ② 落到 VPS 备份线路
-        // ② 备份：VPS 取票 + 全量转发
-        const { base, key } = ytAudioConfig(env);
-        const target = `${base}/v1/stream?id=${encodeURIComponent(id)}&key=${encodeURIComponent(key)}`;
-        return await streamProxy(target, request);
+        return jsonResponse({ error: "音频解析失败，请稍后重试" }, 502);
       }
       let target: string | null = null;
       target = await kuwoResolveUrl(id, br);
@@ -551,10 +540,14 @@ if (type === "img") {
         if (!pic) return jsonResponse({ url: "" });
         return jsonResponse({ url: `/api/music?type=img&u=${encodeURIComponent(pic)}` });
       }
-      // youtube：id 可直接传缩略图 URL 或 videoId
-      if (/^https?:\/\//i.test(id)) return jsonResponse({ url: id });
+      // youtube：缩略图走同源代理（i.ytimg.com 无 CORS 头，直连会裂图）
+      if (/^https?:\/\//i.test(id)) {
+        return jsonResponse({ url: `/api/music?type=img&u=${encodeURIComponent(id)}` });
+      }
       if (!id) return jsonResponse({ url: "" });
-      return jsonResponse({ url: `https://i.ytimg.com/vi/${encodeURIComponent(id)}/mqdefault.jpg` });
+      return jsonResponse({
+        url: `/api/music?type=img&u=${encodeURIComponent(`https://i.ytimg.com/vi/${id}/mqdefault.jpg`)}`,
+      });
     }
 
 if (type === "img") {

@@ -6703,6 +6703,14 @@ async function exploreOnlineMusic(genre) {
 // 修复：加载歌词
 async function loadLyrics(song) {
     try {
+        if (song && song.source === "youtube") {
+            setLyricsContentHtml("<div>不支持歌词</div>");
+            dom.lyrics.classList.add("empty");
+            dom.lyrics.dataset.placeholder = "message";
+            state.lyricsData = [];
+            state.currentLyricLine = -1;
+            return;
+        }
         const lyricUrl = API.getLyric(song);
         debugLog(`获取歌词URL: ${lyricUrl}`);
 
