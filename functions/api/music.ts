@@ -338,6 +338,20 @@ export async function onRequest(context: any): Promise<Response> {
   const br = url.searchParams.get("br") || "320";
 
   try {
+    // 图片中转不依赖音源，先行处理
+    if (type === "img") {
+      const pic = url.searchParams.get("u") || "";
+      if (!/^https?:\/\//i.test(pic)) return jsonResponse({ error: "bad img" }, 400);
+      const res = await fetch(pic, {
+        headers: { "User-Agent": BROWSER_UA, Referer: "https://open.spotify.com/" },
+      });
+      const headers = new Headers();
+      headers.set("content-type", res.headers.get("content-type") || "image/jpeg");
+      headers.set("cache-control", "public, max-age=86400");
+      headers.set("access-control-allow-origin", "*");
+      return new Response(res.body, { status: res.status, headers });
+    }
+
     if (source !== "kuwo" && source !== "spotify") {
       return jsonResponse({ error: "unsupported source" }, 400);
     }
