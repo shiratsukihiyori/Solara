@@ -140,15 +140,23 @@ async function kuwoResolveUrl(id: string, br: string): Promise<string | null> {
 }
 
 async function kuwoSongInfo(id: string): Promise<any> {
-  try {
-    const res = await fetch(
-      `https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=${encodeURIComponent(id)}&httpsStatus=1`,
-      { headers: { "User-Agent": BROWSER_UA, "Referer": "https://m.kuwo.cn/" } }
-    );
-    return await res.json();
-  } catch {
-    return null;
+  // m.kuwo.cn 接口间歇性返回 data:null（实测约三成失败率），这里重试 5 次
+  let lastData: any = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await fetch(
+        `https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=${encodeURIComponent(id)}&httpsStatus=1`,
+        { headers: { "User-Agent": BROWSER_UA, "Referer": "https://m.kuwo.cn/" } }
+      );
+      const data = await res.json();
+      lastData = data;
+      if (data?.data?.lrclist || data?.data?.songinfo) return data;
+    } catch {
+      // 继续重试
+    }
+    if (attempt < 4) await new Promise((resolve) => setTimeout(resolve, 100 + attempt * 50));
   }
+  return lastData;
 }
 
 function toLrc(lrclist: any[]): string {
