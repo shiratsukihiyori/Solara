@@ -267,6 +267,23 @@ async function _youtubeServerFallback(videoId) {
     }
 }
 
+// 探测用户浏览器能否访问 YouTube（ytimg 可达 ≈ YouTube 可达）
+function probeYouTubeReachable(timeoutMs = 4000) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        let settled = false;
+        const done = (ok) => {
+            if (settled) return;
+            settled = true;
+            resolve(ok);
+        };
+        const timer = window.setTimeout(() => done(false), timeoutMs);
+        img.onload = () => { window.clearTimeout(timer); done(true); };
+        img.onerror = () => { window.clearTimeout(timer); done(false); };
+        img.src = `https://i.ytimg.com/vi/dQw4w9WgXcQ/default.jpg?_=${Date.now()}`;
+    });
+}
+
 // 在用户浏览器里显示可见的 YouTube 播放器，让用户自行完成人机验证/登录后再播放
 function showYouTubeVerify(videoId) {
     let panel = document.getElementById('ytVerifyPanel');
@@ -294,6 +311,20 @@ function showYouTubeVerify(videoId) {
     panel.dataset.videoId = videoId;
 
     const host = panel.querySelector('#ytVerifyHost');
+    const hintEl = panel.querySelector('.yt-verify-hint');
+
+    probeYouTubeReachable().then((reachable) => {
+        if (!reachable) {
+            host.innerHTML = '';
+            if (hintEl) {
+                hintEl.innerHTML = '当前网络无法访问 YouTube（本机既连不上直连线路，服务器线路又被 YouTube 风控拦截）。<br>请开启代理后重试，或切换到「网易云 / 酷我 / 哔哩哔哩」音源。';
+            }
+            return;
+        }
+        mountEmbed();
+    });
+
+    const mountEmbed = () => {
     host.innerHTML = '';
     try { _ytBridge.player?.destroy?.(); } catch (_) {}
     _ytBridge.player = null;
@@ -301,7 +332,9 @@ function showYouTubeVerify(videoId) {
     _ytBridge.mode = true;
     _ytBridge.videoId = videoId;
     _ytBridge.ended = false;
-
+    if (hintEl) {
+        hintEl.textContent = '服务器线路被 YouTube 风控拦截。请在下方的官方播放器里完成验证（如有）并点击播放。';
+    }
     // 直接使用官方 embed iframe（不依赖 IFrame API，加载失败也能显示）
     const iframe = document.createElement('iframe');
     iframe.src = `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?autoplay=1&rel=0&playsinline=1`;
@@ -309,6 +342,7 @@ function showYouTubeVerify(videoId) {
     iframe.allowFullscreen = true;
     iframe.style.cssText = 'width:100%;height:100%;border:0;';
     host.appendChild(iframe);
+    };
 }
 
 function _stopYouTubePlayback() {
