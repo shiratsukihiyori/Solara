@@ -4588,6 +4588,27 @@ function createSearchResultItem(song, index) {
         toggleSearchResultSelection(index);
     });
 
+    // 行内封面（YouTube 走同源图片代理）
+    const cover = document.createElement("div");
+    cover.className = "search-result-cover";
+    let coverSrc = "";
+    if (song.source === "youtube" && song.id) {
+        coverSrc = `/api/music?type=img&u=${encodeURIComponent(`https://i.ytimg.com/vi/${song.id}/mqdefault.jpg`)}`;
+    } else if (typeof song.pic_id === "string" && /^https?:/i.test(song.pic_id)) {
+        coverSrc = song.pic_id;
+    }
+    if (coverSrc) {
+        const coverImg = document.createElement("img");
+        coverImg.src = coverSrc;
+        coverImg.alt = "";
+        coverImg.loading = "lazy";
+        cover.appendChild(coverImg);
+    } else {
+        cover.classList.add("is-empty");
+        cover.innerHTML = '<i class="fas fa-music"></i>';
+    }
+    item.appendChild(cover);
+
     const info = document.createElement("div");
     info.className = "search-result-info";
 
@@ -4616,6 +4637,22 @@ function createSearchResultItem(song, index) {
 
     info.appendChild(title);
     info.appendChild(artist);
+
+    const meta = document.createElement("div");
+    meta.className = "search-result-meta";
+    if (song.source === "youtube") {
+        const srcBadge = document.createElement("span");
+        srcBadge.className = "search-result-source";
+        srcBadge.textContent = "YT";
+        meta.appendChild(srcBadge);
+    }
+    if (song.duration) {
+        const durEl = document.createElement("span");
+        durEl.className = "search-result-duration";
+        durEl.textContent = String(song.duration);
+        meta.appendChild(durEl);
+    }
+    item.appendChild(meta);
 
     const actions = document.createElement("div");
     actions.className = "search-result-actions";
