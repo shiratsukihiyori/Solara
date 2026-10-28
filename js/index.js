@@ -284,6 +284,29 @@ function probeYouTubeReachable(timeoutMs = 4000) {
     });
 }
 
+// 按访问者 IP 决定 YouTube 播放线路：境外直连官方 iframe，境内/不可达走服务器流
+let _ytPlaybackMode = null;
+
+async function resolveYouTubePlaybackMode() {
+    if (window.__solaraForceYouTubeMode) return window.__solaraForceYouTubeMode;
+    if (_ytPlaybackMode) return _ytPlaybackMode;
+    try {
+        const res = await fetch("/api/geo", { headers: { Accept: "application/json" } });
+        const data = await res.json();
+        if (data && typeof data.cn === "boolean") {
+            _ytPlaybackMode = data.cn ? "server" : "direct";
+            debugLog(`[YouTube] 地区 ${data.country || "?"} → ${_ytPlaybackMode === "server" ? "服务器线路" : "直连线路"}`);
+            return _ytPlaybackMode;
+        }
+    } catch (error) {
+        // /api/geo 不可用时退回探测
+    }
+    const reachable = await probeYouTubeReachable(2500);
+    _ytPlaybackMode = reachable ? "direct" : "server";
+    debugLog(`[YouTube] 探测 → ${_ytPlaybackMode === "server" ? "服务器线路" : "直连线路"}`);
+    return _ytPlaybackMode;
+}
+
 // 在用户浏览器里显示可见的 YouTube 播放器，让用户自行完成人机验证/登录后再播放
 function showYouTubeVerify(videoId) {
     let panel = document.getElementById('ytVerifyPanel');
@@ -6201,9 +6224,16 @@ async function playSong(song, options = {}) {
         // YouTube：直接走服务器音频流（Worker 取票 → VPS 中继），不再先试直连 iframe
         let audioData;
         if (song && song.source === "youtube") {
-            const streamUrl = `/api/music?type=stream&source=youtube&id=${encodeURIComponent(song.url_id || song.id)}&br=${quality}`;
-            debugLog(`[YouTube] 服务器流: ${streamUrl}`);
-            audioData = { url: streamUrl };
+            const videoId = song.url_id || song.id;
+            const mode = await resolveYouTubePlaybackMode();
+            if (mode === "direct") {
+                debugLog(`[YouTube] 按 IP 判定直连 iframe: ${videoId}`);
+                audioData = { url: `yt:${videoId}` };
+            } else {
+                const streamUrl = `/api/music?type=stream&source=youtube&id=${encodeURIComponent(videoId)}&br=${quality}`;
+                debugLog(`[YouTube] 按 IP 判定服务器流: ${streamUrl}`);
+                audioData = { url: streamUrl };
+            }
         } else {
             audioData = await API.fetchJson(audioUrl);
         }
