@@ -7706,6 +7706,33 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
+// 移动端播放页：把曲名/歌手移到封面上方（方向稿布局）
+function enhanceMobilePlayer() {
+    if (!document.body.classList.contains("mobile-view")) return;
+    if (document.getElementById("mTrackTitle")) return;
+    const turntable = document.getElementById("mobileTurntable");
+    if (!turntable) return;
+    const box = document.createElement("div");
+    box.id = "mTrackTitle";
+    box.className = "m-track-title";
+    box.innerHTML = '<div class="m-track-title__name">未在播放</div><div class="m-track-title__artist">选择一首歌曲开始</div>';
+    turntable.parentNode.insertBefore(box, turntable);
+    const nameEl = document.getElementById("nowPlayingTitle");
+    const artistEl = document.getElementById("nowPlayingArtist");
+    const nameOut = box.querySelector(".m-track-title__name");
+    const artistOut = box.querySelector(".m-track-title__artist");
+    const sync = () => {
+        if (nameEl) nameOut.textContent = nameEl.textContent || "未在播放";
+        if (artistEl) artistOut.textContent = artistEl.textContent || "";
+    };
+    [nameEl, artistEl].forEach((el) => {
+        if (el && window.MutationObserver) {
+            new MutationObserver(sync).observe(el, { childList: true, characterData: true, subtree: true });
+        }
+    });
+    sync();
+}
+
 // 移动端底部导航（按方向稿：搜索 / 雷达 / 播放 / 收藏 / 设置）
 (function initMobileNav() {
     function build() {
@@ -7737,12 +7764,21 @@ document.addEventListener("DOMContentLoaded", () => {
         const title = document.querySelector(".search-title");
         if (title) title.textContent = "搜索";
         const barTitle = document.getElementById("mobileToolbarTitle");
-        if (barTitle) barTitle.textContent = "正在播放";
+        if (barTitle) {
+            barTitle.textContent = "正在播放";
+            if (window.MutationObserver && !barTitle.__pinned) {
+                barTitle.__pinned = true;
+                new MutationObserver(() => {
+                    if (barTitle.textContent !== "正在播放") barTitle.textContent = "正在播放";
+                }).observe(barTitle, { childList: true, characterData: true, subtree: true });
+            }
+        }
     }
     if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", () => { setTimeout(build, 400); setTimeout(renameSearchTitle, 600); });
+        document.addEventListener("DOMContentLoaded", () => { setTimeout(build, 400); setTimeout(renameSearchTitle, 600); setTimeout(enhanceMobilePlayer, 700); });
     } else {
         setTimeout(build, 400);
         setTimeout(renameSearchTitle, 600);
+        setTimeout(enhanceMobilePlayer, 700);
     }
 })();
