@@ -16,6 +16,55 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
     <link rel="stylesheet" href="css/style.css">
+    <!-- 桌面/移动布局用媒体查询加载：解析期就决定，不再等 JS 注入后再套一层 -->
+    <link rel="stylesheet" href="css/desktop.css" media="(min-width: 821px)">
+    <link rel="stylesheet" href="css/mobile.css" media="(max-width: 820px)">
+    <style>
+        /* 首屏底色：样式未就绪前也不出现白屏/上游配色 */
+        html { background: #070b12; }
+        body { margin: 0; background: #070b12; }
+        html.boot-ready body { background: transparent; }
+        /* 首屏遮罩：样式就绪前只显示我们自己的月亮 loader，绝不露出上游 UI */
+        #bootSplash {
+            position: fixed; inset: 0; z-index: 2147483000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 18px; background: radial-gradient(600px 400px at 50% 40%, #0d1724, #070b12 70%);
+            transition: opacity .35s ease, visibility .35s ease;
+        }
+        html.boot-ready #bootSplash { opacity: 0; visibility: hidden; }
+        #bootSplash .moon {
+            width: 54px; height: 54px; border-radius: 50%;
+            background: radial-gradient(circle at 32% 30%, #fff8dd 0 20%, transparent 22%), linear-gradient(145deg, #ffe9a8, #e9c96b 60%, #b8944a);
+            box-shadow: 0 0 40px rgba(255, 233, 168, .35);
+            position: relative; animation: bootPulse 1.6s ease-in-out infinite;
+        }
+        #bootSplash .moon::after {
+            content: ""; position: absolute; width: 42px; height: 42px; border-radius: 50%;
+            background: #0a1019; top: 6px; left: 16px;
+        }
+        #bootSplash .word {
+            font-size: 12px; letter-spacing: .42em; color: rgba(238, 244, 242, .62);
+            font-family: "Segoe UI", "PingFang SC", system-ui, sans-serif;
+        }
+        @keyframes bootPulse { 0%, 100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.06); opacity: 1; } }
+    </style>
+    <script>
+        (function () {
+            try {
+                var saved = localStorage.getItem("theme");
+                var dark = saved ? saved === "dark"
+                    : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+                window.__SOLARA_BOOT_DARK__ = dark;
+            } catch (e) {
+                window.__SOLARA_BOOT_DARK__ = true;
+            }
+            var reveal = function () { document.documentElement.classList.add("boot-ready"); };
+            if (document.readyState === "interactive" || document.readyState === "complete") reveal();
+            else document.addEventListener("DOMContentLoaded", reveal, { once: true });
+            // 兜底：1.2s 内无论加载如何都放行，避免一直空白
+            setTimeout(reveal, 1200);
+        })();
+    </script>
     <script src="js/i18n.js"></script>
     <script>
         (function () {
@@ -26,19 +75,9 @@
             window.__SOLARA_IS_MOBILE = isMobile;
             if (!isMobile) {
                 document.documentElement.classList.add("desktop-view");
-                const desktopLink = document.createElement("link");
-                desktopLink.rel = "stylesheet";
-                desktopLink.href = "css/desktop.css";
-                desktopLink.id = "desktopStylesheet";
-                document.head.appendChild(desktopLink);
                 return;
             }
             document.documentElement.classList.add("mobile-view");
-            const link = document.createElement("link");
-            link.rel = "stylesheet";
-            link.href = "css/mobile.css";
-            link.id = "mobileStylesheet";
-            document.head.appendChild(link);
             let stableViewportHeight = window.innerHeight;
             const setViewportUnit = () => {
                 const vv = window.visualViewport;
@@ -132,6 +171,11 @@
 
 </head>
 <body>
+    <script>if (window.__SOLARA_BOOT_DARK__) document.body.classList.add("dark-mode");</script>
+    <div id="bootSplash" aria-hidden="true">
+        <div class="moon"></div>
+        <div class="word">SOLARA</div>
+    </div>
     <div class="background-stage" id="backgroundStage" aria-hidden="true">
         <div class="background-stage__layer background-stage__layer--base" id="backgroundBaseLayer">
             <div class="aurora-mesh">

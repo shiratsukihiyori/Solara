@@ -21,8 +21,8 @@ export const EXPLORE_RADAR_GENRES = [
 export const SOURCE_OPTIONS = [
     { value: "netease", label: "网易云音乐" },
     { value: "kuwo", label: "酷我音乐" },
-    { value: "joox", label: "JOOX音乐" },
-    { value: "bilibili", label: "哔哩哔哩" }
+    { value: "bilibili", label: "哔哩哔哩" },
+    { value: "youtube", label: "YouTube Music" }
 ];
 
 export const RADAR_PLAYLISTS = [
@@ -145,6 +145,26 @@ export const API = {
     },
 
     search: async (keyword, source = "netease", count = 20, page = 1, debugLogger = null) => {
+        // YouTube / 酷我 走自建适配层
+        if (source === "youtube" || source === "kuwo") {
+            const url = `/api/music?type=search&source=${source}&q=${encodeURIComponent(keyword)}&count=${count}&page=${page}`;
+            if (typeof debugLogger === "function") debugLogger(`适配层搜索: ${url}`);
+            const data = await API.fetchJson(url);
+            const list = Array.isArray(data) ? data : (data && Array.isArray(data.results) ? data.results : null);
+            if (!list) throw new Error(data?.error || "搜索结果格式错误");
+            return list.map(song => ({
+                id: song.id,
+                name: song.name,
+                artist: song.artist,
+                album: song.album,
+                pic_id: song.pic_id,
+                url_id: song.url_id,
+                lyric_id: song.lyric_id,
+                source: song.source || source,
+                duration: song.duration,
+            }));
+        }
+
         const signature = API.generateSignature();
         const url = `${API.baseUrl}?types=search&source=${source}&name=${encodeURIComponent(keyword)}&count=${count}&pages=${page}&s=${signature}`;
 
@@ -231,16 +251,26 @@ export const API = {
     },
 
     getSongUrl: (song, quality = "320") => {
+        if (song.source === "youtube") {
+            return `/api/music?type=url&source=youtube&id=${encodeURIComponent(song.id)}&br=${quality}`;
+        }
         const signature = API.generateSignature();
         return `${API.baseUrl}?types=url&id=${song.id}&source=${song.source || "netease"}&br=${quality}&s=${signature}`;
     },
 
     getLyric: (song) => {
+        if (song.source === "youtube") {
+            return `/api/music?type=lyric&source=youtube&id=${encodeURIComponent(song.id)}`;
+        }
         const signature = API.generateSignature();
         return `${API.baseUrl}?types=lyric&id=${song.lyric_id || song.id}&source=${song.source || "netease"}&s=${signature}`;
     },
 
     getPicUrl: (song) => {
+        if (song.source === "youtube") {
+            const pic = encodeURIComponent(song.pic_id || `https://i.ytimg.com/vi/${song.id}/mqdefault.jpg`);
+            return `/api/music?type=img&u=${pic}`;
+        }
         const signature = API.generateSignature();
         return `${API.baseUrl}?types=pic&id=${song.pic_id}&source=${song.source || "netease"}&size=300&s=${signature}`;
     }

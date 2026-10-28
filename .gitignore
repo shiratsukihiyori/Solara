@@ -11,3 +11,5 @@ server/node_modules/
 # Local backups and temporary scripts
 *.backup.js
 
+
+node_modules/
