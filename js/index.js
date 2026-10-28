@@ -2247,7 +2247,8 @@ function refreshBackground() {
             }, 850);
         });
     };
-    img.src = "https://www.loliapi.com/acg?_=" + Date.now();
+    // 走同源代理：loliapi 对 background-image 直连返回挑战页，Worker 转发真图
+    img.src = "/api/wallpaper?_=" + Date.now();
 }
 
 function applyDynamicGradient(options = {}) {

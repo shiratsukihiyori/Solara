@@ -1414,3 +1414,83 @@ body::after,
     backdrop-filter: blur(34px) saturate(170%) !important;
     -webkit-backdrop-filter: blur(34px) saturate(170%) !important;
 }
+
+/* ══════════════════════════════════════════════════════════
+   恢复动态壁纸（loliapi 每次换歌刷新）
+   之前 Apple 调整把两个背景层的 background-image 覆盖掉了
+   ══════════════════════════════════════════════════════════ */
+.background-stage__layer--base {
+    background-image: var(--bg-image, none), var(--bg-gradient) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+
+.background-stage__layer--transition {
+    background-image: var(--bg-image-next, none), var(--bg-gradient-next) !important;
+    background-size: cover !important;
+    background-position: center !important;
+    opacity: 0;
+    filter: none !important;
+    transition: opacity .8s ease !important;
+    transform: none !important;
+}
+
+body.background-transitioning .background-stage__layer--transition {
+    opacity: 1;
+}
+
+/* 壁纸之上压一层暗幕，保证文字可读 */
+.background-stage__glass-scrim {
+    background: linear-gradient(180deg, rgba(5, 8, 12, .35), rgba(5, 8, 12, .55)) !important;
+    backdrop-filter: none !important;
+}
+
+/* ── 关键：body 的背景会盖住 z-index:-2 的背景层，移到 html ── */
+html {
+    background:
+        radial-gradient(1100px 640px at 16% -12%, rgba(47, 122, 99, .30), transparent 60%),
+        radial-gradient(900px 560px at 88% 2%, rgba(244, 143, 177, .16), transparent 62%),
+        radial-gradient(820px 520px at 52% 112%, rgba(233, 201, 107, .16), transparent 62%),
+        linear-gradient(180deg, #0c1219 0%, #080c12 55%, #05070b 100%) !important;
+}
+
+body {
+    background: transparent !important;
+}
+
+/* 舞台自己也不铺底，交给图层 */
+.background-stage {
+    background: transparent !important;
+}
+
+/* 播放条空封面不显示破图 */
+.now-playing__art[src=""],
+.now-playing__art:not([src]) {
+    visibility: hidden;
+}
+
+/* 壁纸上加暗幕 + 卡片提高不透明度，保证可读 */
+.background-stage__glass-scrim {
+    background: linear-gradient(180deg, rgba(4, 6, 10, .58), rgba(4, 6, 10, .78)) !important;
+    backdrop-filter: blur(2px) saturate(105%) !important;
+    -webkit-backdrop-filter: blur(2px) saturate(105%) !important;
+}
+
+.container {
+    background: rgba(16, 18, 22, .78) !important;
+}
+
+/* 壁纸强度平衡：暗幕减淡，卡片用毛玻璃保证文字可读 */
+.background-stage__glass-scrim {
+    background: linear-gradient(180deg, rgba(4, 6, 10, .28), rgba(4, 6, 10, .42)) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+.container {
+    background: rgba(14, 16, 20, .70) !important;
+    backdrop-filter: blur(40px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(40px) saturate(160%) !important;
+}
