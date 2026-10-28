@@ -1494,3 +1494,231 @@ body {
     backdrop-filter: blur(40px) saturate(160%) !important;
     -webkit-backdrop-filter: blur(40px) saturate(160%) !important;
 }
+
+/* ── 手机端对比度：卡片压暗、图标提亮，壁纸再亮也不糊 ───── */
+@media (max-width: 820px) {
+    .background-stage__glass-scrim {
+        background: linear-gradient(180deg, rgba(4, 6, 10, .52), rgba(4, 6, 10, .66)) !important;
+    }
+
+    .container {
+        background: rgba(12, 14, 18, .92) !important;
+        backdrop-filter: blur(26px) saturate(140%) !important;
+        -webkit-backdrop-filter: blur(26px) saturate(140%) !important;
+        border-color: rgba(255, 255, 255, .10) !important;
+    }
+
+    .mobile-panel {
+        background: transparent !important;
+    }
+
+    .m-nav button {
+        color: rgba(245, 245, 247, .62) !important;
+    }
+
+    .m-nav button.is-active {
+        color: #ffe9a8 !important;
+    }
+
+    .transport-button {
+        background: rgba(255, 255, 255, .10) !important;
+        color: rgba(245, 245, 247, .92) !important;
+        border: 1px solid rgba(255, 255, 255, .07) !important;
+    }
+
+    .transport-button--play {
+        background: #ffe9a8 !important;
+        color: #1c1c1e !important;
+        border: none !important;
+    }
+
+    .action-btn {
+        color: rgba(245, 245, 247, .60) !important;
+    }
+
+    .search-input::placeholder {
+        color: rgba(235, 235, 245, .42) !important;
+    }
+
+    .current-song-title,
+    .m-track-title__name {
+        color: #f7f7f9 !important;
+    }
+
+    .current-song-artist,
+    .m-track-title__artist {
+        color: rgba(235, 235, 245, .62) !important;
+    }
+}
+
+/* ── 设置弹层：统一到品牌夜间风格（去饱和绿块、Apple 式开关）── */
+.modal-overlay {
+    background: rgba(3, 5, 8, .62) !important;
+    backdrop-filter: blur(18px) !important;
+    -webkit-backdrop-filter: blur(18px) !important;
+}
+
+.settings-content,
+.modal-content {
+    background: rgba(17, 19, 23, .96) !important;
+    border: 1px solid rgba(255, 255, 255, .09) !important;
+    border-radius: 28px !important;
+    box-shadow: 0 40px 90px rgba(0, 0, 0, .65) !important;
+    color: #f5f5f7 !important;
+}
+
+.modal-header h2 {
+    color: #f5f5f7 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    letter-spacing: .01em;
+}
+
+.close-modal-btn {
+    color: rgba(235, 235, 245, .6) !important;
+    background: rgba(255, 255, 255, .07) !important;
+    border-radius: 50% !important;
+    width: 30px; height: 30px;
+}
+
+.settings-section h3 {
+    color: rgba(235, 235, 245, .52) !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+}
+
+.settings-hint {
+    color: rgba(235, 235, 245, .42) !important;
+    font-size: 12px !important;
+    line-height: 1.55 !important;
+}
+
+/* 风格胶囊：中性玻璃，选中才点亮 */
+.genre-grid .genre-option,
+.genre-quick-btn,
+.genre-chip {
+    background: rgba(255, 255, 255, .07) !important;
+    border: 1px solid rgba(255, 255, 255, .08) !important;
+    color: rgba(245, 245, 247, .88) !important;
+    border-radius: 12px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}
+
+.genre-quick-btn {
+    background: rgba(255, 255, 255, .10) !important;
+    color: rgba(245, 245, 247, .8) !important;
+    padding: 7px 14px !important;
+}
+
+.genre-grid .genre-option.is-active,
+.genre-grid .genre-option.selected,
+.genre-grid .genre-option:has(input:checked) {
+    background: rgba(255, 233, 168, .14) !important;
+    border-color: rgba(255, 233, 168, .45) !important;
+    color: #ffe9a8 !important;
+}
+
+/* Apple 式开关 */
+.toggle-label input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-slider {
+    background: rgba(255, 255, 255, .16) !important;
+    border-radius: 999px !important;
+    width: 46px !important;
+    height: 28px !important;
+    transition: background .2s ease;
+}
+
+.toggle-slider::before {
+    width: 24px !important;
+    height: 24px !important;
+    background: #ffffff !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, .35) !important;
+    top: 2px !important;
+    left: 2px !important;
+}
+
+.toggle-label input:checked + .toggle-slider {
+    background: #4fd1a5 !important;
+}
+
+.toggle-label input:checked + .toggle-slider::before {
+    transform: translateX(18px) !important;
+}
+
+.toggle-label span:first-child {
+    color: #f5f5f7 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+}
+
+.settings-textarea {
+    background: rgba(255, 255, 255, .05) !important;
+    border: 1px solid rgba(255, 255, 255, .08) !important;
+    color: #f5f5f7 !important;
+    border-radius: 14px !important;
+}
+
+.load-custom-playlist-btn {
+    background: rgba(255, 255, 255, .10) !important;
+    color: #f5f5f7 !important;
+    border-radius: 12px !important;
+    border: 1px solid rgba(255, 255, 255, .08) !important;
+}
+
+.save-settings-btn {
+    background: #ffe9a8 !important;
+    color: #1c1c1e !important;
+    border-radius: 14px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+
+/* 手机：设置层底部贴合 */
+@media (max-width: 820px) {
+    .settings-content {
+        border-radius: 24px 24px 0 0 !important;
+        max-height: 92vh !important;
+    }
+
+    .modal-body {
+        max-height: calc(92vh - 130px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* 风格胶囊实际结构： .genre-item > input + .genre-label */
+.genre-item {
+    background: transparent !important;
+    border: none !important;
+}
+
+.genre-label {
+    background: rgba(255, 255, 255, .07) !important;
+    border: 1px solid rgba(255, 255, 255, .08) !important;
+    color: rgba(245, 245, 247, .88) !important;
+    border-radius: 12px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 11px 8px !important;
+    font-size: 13.5px !important;
+}
+
+.genre-item input:checked + .genre-label {
+    background: rgba(255, 233, 168, .15) !important;
+    border-color: rgba(255, 233, 168, .5) !important;
+    color: #ffe9a8 !important;
+}
+
+.genre-item input {
+    display: none !important;
+}

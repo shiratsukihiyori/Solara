@@ -2227,7 +2227,25 @@ function setDocumentGradient(gradient, { immediate = false } = {}) {
     });
 }
 
+function dynamicWallpaperEnabled() {
+    try {
+        return localStorage.getItem("dynamicWallpaper") === "1";
+    } catch (error) {
+        return false;
+    }
+}
+
+function clearDynamicWallpaper() {
+    removeGlobalThemeProperty("--bg-image");
+    removeGlobalThemeProperty("--bg-image-next");
+}
+
 function refreshBackground() {
+    // 默认关闭：不开就不请求网络壁纸，直接用夜空渐变
+    if (!dynamicWallpaperEnabled()) {
+        clearDynamicWallpaper();
+        return;
+    }
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
@@ -7566,6 +7584,15 @@ async function saveSettings() {
 
     const heartbeatMode = dom.heartbeatModeCheckbox ? dom.heartbeatModeCheckbox.checked : false;
 
+    const wallpaperToggle = document.getElementById("dynamicWallpaperToggle");
+    const wallpaperOn = wallpaperToggle ? wallpaperToggle.checked : false;
+    try { localStorage.setItem("dynamicWallpaper", wallpaperOn ? "1" : "0"); } catch (error) {}
+    if (wallpaperOn) {
+        refreshBackground();
+    } else {
+        clearDynamicWallpaper();
+    }
+
     state.radarSettings = {
         genres: selectedGenres,
         heartbeatMode: heartbeatMode
@@ -7685,6 +7712,11 @@ function applySettingsToUI() {
         state.heartbeatMode = state.radarSettings.heartbeatMode;
     }
 
+    const wallpaperToggle = document.getElementById("dynamicWallpaperToggle");
+    if (wallpaperToggle) {
+        wallpaperToggle.checked = dynamicWallpaperEnabled();
+    }
+
     if (dom.fallbackPlaylistIds) {
         const savedInput = safeGetLocalStorage("neteasePlaylistInput");
         if (savedInput) dom.fallbackPlaylistIds.value = savedInput;
@@ -7705,6 +7737,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!remoteSyncEnabled) {
         initSettings();
     }
+    if (!dynamicWallpaperEnabled()) clearDynamicWallpaper();
+});
+
+// 换歌壁纸开关：勾选即时生效
+document.addEventListener("DOMContentLoaded", () => {
+    const toggle = document.getElementById("dynamicWallpaperToggle");
+    if (!toggle) return;
+    toggle.checked = dynamicWallpaperEnabled();
+    toggle.addEventListener("change", () => {
+        try { localStorage.setItem("dynamicWallpaper", toggle.checked ? "1" : "0"); } catch (error) {}
+        if (toggle.checked) {
+            refreshBackground();
+            showNotification("已开启换歌壁纸", "success");
+        } else {
+            clearDynamicWallpaper();
+            showNotification("已关闭换歌壁纸", "info");
+        }
+    });
 });
 
 // 移动端播放页：把曲名/歌手移到封面上方（方向稿布局）
@@ -7723,8 +7773,13 @@ function enhanceMobilePlayer() {
     const nameOut = box.querySelector(".m-track-title__name");
     const artistOut = box.querySelector(".m-track-title__artist");
     const sync = () => {
-        if (nameEl) nameOut.textContent = nameEl.textContent || "未在播放";
-        if (artistEl) artistOut.textContent = artistEl.textContent || "";
+        const title = nameEl ? (nameEl.textContent || "").trim() : "";
+        const artist = artistEl ? (artistEl.textContent || "").trim() : "";
+        nameOut.textContent = title || "未在播放";
+        artistOut.textContent = artist;
+        // 空闲时不显示这条标题（面板里已有占位提示，避免重复）
+        const idle = !title || title === "未在播放" || title === "选择一首歌曲开始";
+        box.style.display = idle ? "none" : "";
     };
     [nameEl, artistEl].forEach((el) => {
         if (el && window.MutationObserver) {
