@@ -375,58 +375,119 @@ function parseYouTubeItem(it: any): any | null {
   }
 }
 
-async function youtubeSearch(q: string, count: number): Promise<any[]> {
-  const contexts = [
-    { host: "https://music.youtube.com", clientName: "WEB_REMIX" },
-    { host: "https://www.youtube.com", clientName: "WEB_REMIX" },
-  ];
+const WEB_CLIENT_VERSION = "2.20241127.01.00";
 
-  for (const ctx of contexts) {
+function parseWebVideoItem(it: any): any | null {
+  try {
+    const videoId = String(it.videoId || "");
+    const title =
+      (it.title?.runs || []).map((r: any) => String(r.text || "")).join("").trim() ||
+      String(it.title?.simpleText || "");
+    const owner =
+      (it.ownerText?.runs || []).map((r: any) => String(r.text || "")).join("").trim() ||
+      (it.longBylineText?.runs || []).map((r: any) => String(r.text || "")).join("").trim();
+    const duration = String(it.lengthText?.simpleText || "");
+    if (!videoId || !title) return null;
+    const live = (it.badges || []).some(
+      (b: any) => b?.metadataBadgeRenderer?.style === "BADGE_STYLE_TYPE_LIVE_NOW"
+    );
+    if (live) return null;
+    return {
+      id: videoId,
+      name: title,
+      artist: owner ? [owner] : ["YouTube"],
+      album: "",
+      duration,
+      pic_id: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      url_id: videoId,
+      lyric_id: videoId,
+      source: "youtube",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function collectWebRenderers(node: any, out: any[], depth = 0): void {
+  if (!node || depth > 14) return;
+  if (Array.isArray(node)) {
+    for (const item of node) collectWebRenderers(item, out, depth + 1);
+    return;
+  }
+  if (typeof node === "object") {
+    if (node.videoRenderer) out.push(node.videoRenderer);
+    if (node.compactVideoRenderer) out.push(node.compactVideoRenderer);
+    for (const key of Object.keys(node)) collectWebRenderers(node[key], out, depth + 1);
+  }
+}
+
+async function youtubeSearch(
+  q: string,
+  count: number,
+  _continuation?: string
+): Promise<{ items: any[]; continuation: string }> {
+  for (const host of ["https://music.youtube.com", "https://www.youtube.com"]) {
     try {
-      const res = await fetchWithTimeout(
-        `${ctx.host}/youtubei/v1/search?prettyPrint=false`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "user-agent": BROWSER_UA,
-            "x-youtube-client-name": ctx.clientName === "WEB_REMIX" ? "67" : "1",
-            "x-youtube-client-version": YTM_CLIENT_VERSION,
-            origin: ctx.host,
-            referer: `${ctx.host}/`,
-          },
-          body: JSON.stringify({
-            context: {
-              client: {
-                clientName: ctx.clientName,
-                clientVersion: YTM_CLIENT_VERSION,
-                hl: "zh-CN",
-                gl: "JP",
-              },
-            },
-            query: q,
-          }),
-        }
-      );
+      const res = await fetchWithTimeout(`${host}/youtubei/v1/search?prettyPrint=false`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "user-agent": BROWSER_UA,
+          "x-youtube-client-name": host.includes("music") ? "67" : "1",
+          "x-youtube-client-version": YTM_CLIENT_VERSION,
+          origin: host,
+          referer: `${host}/`,
+        },
+        body: JSON.stringify({
+          context: { client: { clientName: "WEB_REMIX", clientVersion: YTM_CLIENT_VERSION, hl: "zh-CN", gl: "JP" } },
+          query: q,
+        }),
+      });
       if (!res.ok) continue;
       const data = await res.json();
       const renderers: any[] = [];
       collectMusicRenderers(data, renderers);
       const seen = new Set<string>();
-      const results: any[] = [];
+      const items: any[] = [];
       for (const it of renderers) {
         const song = parseYouTubeItem(it);
         if (!song || seen.has(song.id)) continue;
         seen.add(song.id);
-        results.push(song);
+        items.push(song);
       }
-      if (results.length > 0) return results.slice(0, count);
+      if (items.length > 0) return { items: items.slice(0, count), continuation: "" };
     } catch {
-      // 尝试下一个入口
+      // 下一个入口
     }
   }
-  return [];
+  return { items: [], continuation: "" };
 }
+
+// 在 innertube 响应里找续页 token
+function findContinuationToken(node: any, depth = 0): string {
+  if (!node || depth > 12) return "";
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = findContinuationToken(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+  if (typeof node === "object") {
+    if (node.continuationCommand && typeof node.continuationCommand.token === "string") {
+      return node.continuationCommand.token;
+    }
+    if (node.nextContinuationData && typeof node.nextContinuationData.continuation === "string") {
+      return node.nextContinuationData.continuation;
+    }
+    for (const key of Object.keys(node)) {
+      const found = findContinuationToken(node[key], depth + 1);
+      if (found) return found;
+    }
+  }
+  return "";
+}
+
 // ---------- 音频流中转（支持 Range 拖动） ----------
 async function streamProxy(target: string, request: Request): Promise<Response> {
   const headers: Record<string, string> = { "User-Agent": BROWSER_UA };
@@ -639,9 +700,12 @@ if (type === "img") {
     if (type === "search") {
       const q = url.searchParams.get("q") || "";
       if (!q.trim()) return jsonResponse({ error: "missing q" }, 400);
-      const results =
-        source === "kuwo" ? await kuwoSearch(q, page, count) : await youtubeSearch(q, count);
-      return jsonResponse(results);
+      if (source === "kuwo") {
+        return jsonResponse(await kuwoSearch(q, page, count));
+      }
+      const continuation = url.searchParams.get("continuation") || "";
+      const yt = await youtubeSearch(q, count, continuation || undefined);
+      return jsonResponse({ results: yt.items, continuation: yt.continuation, hasMore: !!yt.continuation });
     }
 
     if (type === "url") {

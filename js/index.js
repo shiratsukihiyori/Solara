@@ -1220,11 +1220,30 @@ const API = {
     search: async (keyword, source = "netease", count = 20, page = 1) => {
         // 酷我 / Spotify 走同源适配层
         if (source === "kuwo" || source === "youtube") {
-            const data = await API.fetchJson(
-                `/api/music?type=search&source=${source}&q=${encodeURIComponent(keyword)}&count=${count}&page=${page}`
-            );
-            if (!Array.isArray(data)) throw new Error(data?.error || "搜索结果格式错误");
-            return data.map(song => ({
+            // YouTube 搜索接口没有续页：加载更多时用「关键词 + 上一条的歌手」再搜一次，去重后追加
+            let effectiveKeyword = keyword;
+            if (source === "youtube" && page > 1 && API._ytLastArtist) {
+                effectiveKeyword = `${keyword} ${API._ytLastArtist}`;
+            }
+            const searchUrl = `/api/music?type=search&source=${source}&q=${encodeURIComponent(effectiveKeyword)}&count=${count}&page=${page}`;
+            const data = await API.fetchJson(searchUrl);
+            const list = Array.isArray(data) ? data : (data && Array.isArray(data.results) ? data.results : null);
+            if (!list) throw new Error(data?.error || "搜索结果格式错误");
+            if (source === "youtube") {
+                if (page === 1) API._ytSeenIds = new Set();
+                const seenIds = API._ytSeenIds || (API._ytSeenIds = new Set());
+                const fresh = list.filter((song) => song && song.id && !seenIds.has(song.id));
+                for (const song of fresh) seenIds.add(song.id);
+                if (page === 1 && fresh.length && fresh[0].artist && fresh[0].artist.length) {
+                    API._ytLastArtist = String(fresh[0].artist[0] || "").trim();
+                }
+                // YouTube Music 搜索没有续页（接口不返回 continuation），只有首页结果
+                API._ytHasMore = false;
+                debugLog(`YouTube 去重后新增 ${fresh.length} 条（第 ${page} 页）`);
+                list.length = 0;
+                list.push(...fresh);
+            }
+            return list.map(song => ({
                 id: song.id,
                 name: song.name,
                 artist: song.artist,
@@ -4472,7 +4491,7 @@ async function performSearch(isLiveSearch = false) {
             state.searchResults = [...state.searchResults, ...results];
         }
 
-        state.hasMoreResults = results.length === 20;
+        state.hasMoreResults = source === "youtube" ? !!API._ytHasMore : results.length === 20;
 
         // 显示搜索结果
         displaySearchResults(results, {
@@ -4526,7 +4545,7 @@ async function loadMoreResults() {
 
         if (results.length > 0) {
             state.searchResults = [...state.searchResults, ...results];
-            state.hasMoreResults = results.length === 20;
+            state.hasMoreResults = source === "youtube" ? !!API._ytHasMore : results.length === 20;
             displaySearchResults(results, {
                 totalCount: state.searchResults.length,
             });
