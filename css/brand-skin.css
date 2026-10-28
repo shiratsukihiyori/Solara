@@ -1,0 +1,342 @@
+/* ─────────────────────────────────────────────────────────────
+   白月日和 · 品牌皮肤（旧版 / main）
+   夜空 + 月光金 + 日和绿 + 樱粉；只改观感，不动布局逻辑
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+    --brand-night: #070b12;
+    --brand-night-2: #0a1019;
+    --brand-moon: #ffe9a8;
+    --brand-moon-deep: #e9c96b;
+    --brand-green: #4fd1a5;
+    --brand-green-deep: #2c8f6d;
+    --brand-pink: #f48fb1;
+    --brand-line: rgba(255, 255, 255, 0.09);
+}
+
+html {
+    background: var(--brand-night);
+}
+
+body {
+    background:
+        radial-gradient(1100px 620px at 18% -10%, rgba(47, 122, 99, 0.34), transparent 62%),
+        radial-gradient(900px 520px at 88% 6%, rgba(244, 143, 177, 0.15), transparent 60%),
+        radial-gradient(760px 460px at 52% 108%, rgba(233, 201, 107, 0.13), transparent 62%),
+        linear-gradient(180deg, #0a1019 0%, #070b12 55%, #060910 100%) !important;
+}
+
+/* 星点（覆盖在背景上，不吃点击） */
+body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        radial-gradient(1.4px 1.4px at 12% 22%, rgba(255, 255, 255, .5), transparent 60%),
+        radial-gradient(1.2px 1.2px at 32% 12%, rgba(255, 255, 255, .32), transparent 60%),
+        radial-gradient(1.6px 1.6px at 68% 18%, rgba(255, 233, 168, .45), transparent 60%),
+        radial-gradient(1.2px 1.2px at 84% 34%, rgba(255, 255, 255, .3), transparent 60%),
+        radial-gradient(1.3px 1.3px at 46% 62%, rgba(255, 255, 255, .22), transparent 60%),
+        radial-gradient(1.5px 1.5px at 22% 78%, rgba(244, 143, 177, .3), transparent 60%);
+    opacity: .85;
+}
+
+/* ── 主卡片 ─────────────────────────────────────────── */
+.container {
+    background: linear-gradient(180deg, rgba(22, 33, 46, 0.82), rgba(12, 19, 28, 0.9)) !important;
+    border: 1px solid var(--brand-line) !important;
+    border-radius: 26px !important;
+    box-shadow:
+        0 30px 80px rgba(0, 0, 0, .55),
+        inset 0 1px 0 rgba(255, 255, 255, .06) !important;
+    backdrop-filter: blur(24px);
+    position: relative;
+    z-index: 1;
+}
+
+/* ── 头部：月亮 + 标题 ──────────────────────────────── */
+.header {
+    position: relative;
+    padding-left: 0;
+}
+
+.header h1 {
+    position: relative;
+    padding-left: 52px;
+    letter-spacing: .1em !important;
+    font-weight: 600 !important;
+    font-size: 1.55em !important;
+    color: #eef4f2 !important;
+    text-shadow: none !important;
+}
+
+.header h1::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 32% 30%, #fff8dd 0 22%, transparent 24%),
+        linear-gradient(145deg, var(--brand-moon) 0%, var(--brand-moon-deep) 58%, #b8944a 100%);
+    box-shadow: 0 0 26px rgba(255, 233, 168, .42);
+}
+
+.header h1::after {
+    content: "";
+    position: absolute;
+    left: 24px;
+    top: 50%;
+    transform: translateY(-54%);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: #0b121c;
+    pointer-events: none;
+}
+
+.header .warning {
+    color: rgba(226, 238, 234, .45) !important;
+    font-style: normal !important;
+    font-size: 11.5px !important;
+    letter-spacing: .04em;
+}
+
+/* ── 搜索区 ─────────────────────────────────────────── */
+.search-area {
+    background: rgba(9, 15, 23, 0.55) !important;
+    border: 1px solid var(--brand-line) !important;
+    border-radius: 20px !important;
+    backdrop-filter: blur(18px);
+}
+
+.search-input-wrapper {
+    background: rgba(255, 255, 255, 0.035) !important;
+    border: 1px solid var(--brand-line) !important;
+    border-radius: 13px !important;
+    height: 44px;
+}
+
+.search-input {
+    color: #eef4f2 !important;
+}
+
+.search-input::placeholder {
+    color: rgba(226, 238, 234, .38) !important;
+}
+
+.search-btn {
+    background: linear-gradient(140deg, var(--brand-green), var(--brand-green-deep)) !important;
+    color: #06120f !important;
+    border-radius: 13px !important;
+    font-weight: 700 !important;
+    box-shadow: 0 8px 22px rgba(79, 209, 165, .28);
+}
+
+.source-select-btn {
+    background: rgba(79, 209, 165, .08) !important;
+    border: 1px solid rgba(79, 209, 165, .3) !important;
+    color: var(--brand-green) !important;
+    border-radius: 13px !important;
+}
+
+.source-menu {
+    background: rgba(12, 19, 28, .96) !important;
+    border: 1px solid var(--brand-line) !important;
+    backdrop-filter: blur(20px);
+}
+
+.source-option.active,
+.source-option:hover {
+    color: var(--brand-moon) !important;
+    background: rgba(255, 233, 168, .08) !important;
+}
+
+/* ── 结果列表 ───────────────────────────────────────── */
+.search-results {
+    border-top: 1px solid var(--brand-line) !important;
+    background: rgba(6, 11, 17, .35);
+}
+
+.search-result-item {
+    border-radius: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, .045) !important;
+}
+
+.search-result-item:hover {
+    background: rgba(79, 209, 165, .07) !important;
+}
+
+.search-result-item.active,
+.search-result-item.current {
+    background: rgba(255, 233, 168, .08) !important;
+    box-shadow: inset 2px 0 0 var(--brand-moon);
+}
+
+.search-result-title {
+    color: #eef4f2;
+}
+
+.search-result-artist {
+    color: rgba(226, 238, 234, .55) !important;
+}
+
+.search-result-actions button {
+    color: rgba(226, 238, 234, .55);
+}
+
+.search-result-actions button:hover {
+    color: var(--brand-moon);
+}
+
+/* ── 封面 / 列表 / 歌词 ─────────────────────────────── */
+.cover-area,
+.playlist,
+.lyrics {
+    background: rgba(255, 255, 255, .035) !important;
+    border: 1px solid var(--brand-line) !important;
+    border-radius: 20px !important;
+}
+
+.album-cover {
+    border-radius: 16px !important;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, .45);
+}
+
+.album-cover img {
+    border-radius: 16px !important;
+}
+
+.playlist-tab.active {
+    color: var(--brand-night) !important;
+    background: linear-gradient(140deg, var(--brand-green), var(--brand-green-deep)) !important;
+}
+
+.playlist-item.active,
+.playlist-item.playing {
+    background: rgba(255, 233, 168, .08) !important;
+    box-shadow: inset 2px 0 0 var(--brand-moon);
+}
+
+.lyrics-line.active {
+    color: var(--brand-moon) !important;
+    text-shadow: 0 0 18px rgba(255, 233, 168, .35);
+}
+
+/* ── 底部控制条 ─────────────────────────────────────── */
+.controls {
+    background: linear-gradient(180deg, rgba(10, 16, 24, .55), rgba(8, 13, 20, .9)) !important;
+    border: 1px solid var(--brand-line) !important;
+    border-radius: 18px !important;
+    backdrop-filter: blur(20px);
+}
+
+.transport-button {
+    color: rgba(226, 238, 234, .82) !important;
+}
+
+.transport-button--play {
+    background: linear-gradient(145deg, var(--brand-moon), var(--brand-moon-deep)) !important;
+    color: #201a08 !important;
+    border-radius: 50% !important;
+    box-shadow: 0 8px 24px rgba(255, 233, 168, .3) !important;
+}
+
+.controls-progress-fill {
+    background: linear-gradient(90deg, var(--brand-green), var(--brand-moon)) !important;
+}
+
+#progressBar::-webkit-slider-thumb {
+    background: var(--brand-moon) !important;
+    box-shadow: 0 0 12px rgba(255, 233, 168, .8) !important;
+}
+
+#volumeSlider {
+    accent-color: var(--brand-moon);
+}
+
+.now-playing__title {
+    color: #eef4f2 !important;
+}
+
+.now-playing__artist {
+    color: rgba(226, 238, 234, .55) !important;
+}
+
+.player-quality-btn,
+.extra-controls-btn {
+    color: rgba(226, 238, 234, .6) !important;
+    border-color: var(--brand-line) !important;
+}
+
+.player-quality-menu {
+    background: rgba(14, 22, 32, .98) !important;
+    border: 1px solid var(--brand-line) !important;
+}
+
+/* 滚动条 */
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, .16) !important;
+}
+
+/* 浅色（日和）也不回到上游绿 */
+body:not(.dark-mode) {
+    background:
+        radial-gradient(1000px 600px at 18% -8%, rgba(47, 122, 99, .18), transparent 60%),
+        radial-gradient(820px 500px at 88% 4%, rgba(244, 143, 177, .14), transparent 58%),
+        radial-gradient(700px 440px at 52% 106%, rgba(233, 201, 107, .22), transparent 60%),
+        linear-gradient(180deg, #fbf7ec, #f2ece0 55%, #e9e2d3) !important;
+}
+
+body:not(.dark-mode) .container {
+    background: linear-gradient(180deg, rgba(255, 253, 247, .84), rgba(246, 241, 230, .94)) !important;
+    border-color: rgba(29, 42, 38, .1) !important;
+}
+
+body:not(.dark-mode) .header h1 {
+    color: #1d2a26 !important;
+}
+
+body:not(.dark-mode) .search-area {
+    background: rgba(255, 255, 255, .52) !important;
+    border-color: rgba(29, 42, 38, .1) !important;
+}
+
+body:not(.dark-mode) .search-result-title,
+body:not(.dark-mode) .now-playing__title {
+    color: #1d2a26 !important;
+}
+
+/* ── 覆盖旧版背景舞台（JS 会写 inline style，这里强制压回夜空）── */
+.background-stage,
+.background-stage__layer,
+.background-stage__layer--base,
+.background-stage__layer--transition {
+    background: transparent !important;
+}
+
+.background-stage {
+    background:
+        radial-gradient(1100px 620px at 18% -10%, rgba(47, 122, 99, 0.34), transparent 62%),
+        radial-gradient(900px 520px at 88% 6%, rgba(244, 143, 177, 0.15), transparent 60%),
+        radial-gradient(760px 460px at 52% 108%, rgba(233, 201, 107, 0.13), transparent 62%),
+        linear-gradient(180deg, #0a1019 0%, #070b12 55%, #060910 100%) !important;
+}
+
+/* 标题：干掉渐变文字（旧版用 background-clip:text） */
+.header h1 {
+    background: none !important;
+    -webkit-background-clip: initial !important;
+    background-clip: initial !important;
+    -webkit-text-fill-color: currentColor !important;
+    color: #eef4f2 !important;
+}
+
+body:not(.dark-mode) .header h1 {
+    color: #1d2a26 !important;
+}

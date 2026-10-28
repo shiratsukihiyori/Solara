@@ -6161,7 +6161,15 @@ async function playSong(song, options = {}) {
         const audioUrl = API.getSongUrl(song, quality);
         debugLog(`获取音频URL: ${audioUrl}`);
 
-        const audioData = await API.fetchJson(audioUrl);
+        // YouTube：直接走服务器音频流（Worker 取票 → VPS 中继），不再先试直连 iframe
+        let audioData;
+        if (song && song.source === "youtube") {
+            const streamUrl = `/api/music?type=stream&source=youtube&id=${encodeURIComponent(song.url_id || song.id)}&br=${quality}`;
+            debugLog(`[YouTube] 服务器流: ${streamUrl}`);
+            audioData = { url: streamUrl };
+        } else {
+            audioData = await API.fetchJson(audioUrl);
+        }
 
         if (!audioData || !audioData.url) {
             throw new Error('无法获取音频播放地址');
