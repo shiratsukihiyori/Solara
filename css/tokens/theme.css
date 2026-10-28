@@ -1,46 +1,45 @@
 :root {
     --font-main: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-    
-    /* 极光流体多色源（封面调色板动态覆盖） */
-    --palette-c1: #4a90e2;
-    --palette-c2: #50e3c2;
-    --palette-c3: #b8e986;
-    --palette-c4: #7b92b2;
-    --palette-accent: #1abc9c;
-    --palette-glow: rgba(26, 188, 156, 0.45);
-    
-    --bg-gradient: radial-gradient(circle at 20% 20%, #e2eae7 0%, #cbd9d4 40%, #b7cac4 100%);
+
+    /* 白月日和 · 日和（浅色）：暖米 + 深绿 + 月光金 */
+    --palette-c1: #d9e7df;
+    --palette-c2: #f4e7c3;
+    --palette-c3: #f6dbe5;
+    --palette-c4: #cfe0d8;
+    --palette-accent: #2f7a63;
+    --palette-glow: rgba(47, 122, 99, 0.35);
+
+    --bg-gradient: radial-gradient(circle at 20% 20%, #fbf7ec 0%, #f2ece0 45%, #e6eee7 100%);
     --bg-gradient-next: var(--bg-gradient);
 
-    /* Apple 拟态材质系统 - 深度通透与发光描边 */
-    --container-bg: rgba(255, 255, 255, 0.28);
-    --component-bg: rgba(255, 255, 255, 0.18);
-    --apple-glass-border: rgba(255, 255, 255, 0.45);
-    --apple-glass-border-top: rgba(255, 255, 255, 0.82);
-    --apple-glass-blur: blur(28px) saturate(200%);
-    --container-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.14), 0 0 1px 1px rgba(255, 255, 255, 0.45) inset;
+    --container-bg: rgba(255, 253, 247, 0.56);
+    --component-bg: rgba(255, 255, 255, 0.42);
+    --apple-glass-border: rgba(255, 255, 255, 0.72);
+    --apple-glass-border-top: rgba(255, 255, 255, 0.92);
+    --apple-glass-blur: blur(28px) saturate(180%);
+    --container-shadow: 0 24px 64px -14px rgba(29, 42, 38, 0.18), 0 0 1px 1px rgba(255, 255, 255, 0.6) inset;
     --backdrop-blur: 24px;
 
-    --text-color: #1d1d1f;
-    --text-secondary-color: rgba(60, 60, 67, 0.75);
-    --text-tertiary-color: rgba(60, 60, 67, 0.45);
+    --text-color: #1d2a26;
+    --text-secondary-color: rgba(29, 42, 38, 0.72);
+    --text-tertiary-color: rgba(29, 42, 38, 0.45);
 
-    --primary-color: #10a37f;
-    --primary-color-dark: #0d8467;
-    --warning-color: #ff3b30;
-    --success-color: #34c759;
-    --success-color-hover: #2db34e;
+    --primary-color: #2f7a63;
+    --primary-color-dark: #24604e;
+    --warning-color: #d1495b;
+    --success-color: #2f9d7a;
+    --success-color-hover: #24805f;
 
-    --item-hover-bg: rgba(16, 163, 127, 0.09);
-    --item-current-bg: rgba(16, 163, 127, 0.18);
+    --item-hover-bg: rgba(47, 122, 99, 0.09);
+    --item-current-bg: rgba(47, 122, 99, 0.16);
     --item-current-text: var(--text-color);
-    --border-color: rgba(255, 255, 255, 0.35);
+    --border-color: rgba(29, 42, 38, 0.10);
 
-    --lyrics-highlight-bg: rgba(16, 163, 127, 0.12);
-    --lyrics-highlight-text: #0d8467;
-    --lyrics-highlight-shadow: rgba(16, 163, 127, 0.35);
+    --lyrics-highlight-bg: rgba(47, 122, 99, 0.13);
+    --lyrics-highlight-text: #24604e;
+    --lyrics-highlight-shadow: rgba(47, 122, 99, 0.35);
 
-    --scrollbar-thumb-bg: rgba(0, 0, 0, 0.18);
+    --scrollbar-thumb-bg: rgba(29, 42, 38, 0.18);
     --scrollbar-track-bg: transparent;
 
     --spring-snappy: cubic-bezier(0.16, 1, 0.3, 1);
@@ -49,36 +48,38 @@
 }
 
 .dark-mode {
-    --palette-c1: #0e3029;
-    --palette-c2: #164e43;
-    --palette-c3: #1a6b5c;
-    --palette-c4: #0b1d19;
-    --palette-accent: #34d1b6;
-    --palette-glow: rgba(52, 209, 182, 0.4);
+    /* 白月日和 · 夜空：墨蓝黑 + 月光金 + 日和绿 + 樱粉 */
+    --palette-c1: #0d1f1a;
+    --palette-c2: #12261f;
+    --palette-c3: #1a352b;
+    --palette-c4: #0a1411;
+    --palette-accent: #4fd1a5;
+    --palette-glow: rgba(79, 209, 165, 0.36);
 
-    --bg-gradient: radial-gradient(circle at 20% 20%, #0d1e1c 0%, #071312 60%, #020606 100%);
+    --bg-gradient: radial-gradient(circle at 18% 10%, #12212c 0%, #0a1019 46%, #05070c 100%);
 
-    --container-bg: rgba(18, 22, 28, 0.62);
-    --component-bg: rgba(255, 255, 255, 0.05);
-    --apple-glass-border: rgba(255, 255, 255, 0.12);
-    --apple-glass-border-top: rgba(255, 255, 255, 0.28);
-    --container-shadow: 0 36px 88px -18px rgba(0, 0, 0, 0.72), 0 0 1px 1px rgba(255, 255, 255, 0.1) inset;
+    --container-bg: rgba(11, 18, 26, 0.68);
+    --component-bg: rgba(255, 255, 255, 0.045);
+    --apple-glass-border: rgba(255, 255, 255, 0.10);
+    --apple-glass-border-top: rgba(255, 255, 255, 0.24);
+    --container-shadow: 0 36px 88px -20px rgba(0, 0, 0, 0.78), 0 0 1px 1px rgba(255, 255, 255, 0.08) inset;
 
-    --text-color: #f5f5f7;
-    --text-secondary-color: rgba(235, 235, 245, 0.72);
-    --text-tertiary-color: rgba(235, 235, 245, 0.42);
+    --text-color: #eef4f2;
+    --text-secondary-color: rgba(226, 238, 234, 0.72);
+    --text-tertiary-color: rgba(226, 238, 234, 0.42);
 
-    --primary-color: #34d1b6;
-    --primary-color-dark: #28a992;
-    --item-hover-bg: rgba(52, 209, 182, 0.12);
-    --item-current-bg: rgba(52, 209, 182, 0.24);
-    --border-color: rgba(255, 255, 255, 0.1);
+    --primary-color: #4fd1a5;
+    --primary-color-dark: #2f9d7a;
+    --item-hover-bg: rgba(79, 209, 165, 0.10);
+    --item-current-bg: rgba(255, 233, 168, 0.13);
+    --item-current-text: #ffe9a8;
+    --border-color: rgba(255, 255, 255, 0.09);
 
-    --lyrics-highlight-bg: rgba(52, 209, 182, 0.15);
-    --lyrics-highlight-text: #ffffff;
-    --lyrics-highlight-shadow: rgba(52, 209, 182, 0.5);
+    --lyrics-highlight-bg: rgba(255, 233, 168, 0.12);
+    --lyrics-highlight-text: #ffe9a8;
+    --lyrics-highlight-shadow: rgba(255, 233, 168, 0.45);
 
-    --scrollbar-thumb-bg: rgba(255, 255, 255, 0.2);
+    --scrollbar-thumb-bg: rgba(255, 255, 255, 0.18);
     --success-color-hover: #1f8a4f;
 }
 
@@ -113,7 +114,7 @@ body {
     box-sizing: border-box;
     color: var(--text-color);
     transition: color 0.5s;
-    background-color: #06070a;
+    background-color: #070b12;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
@@ -128,7 +129,7 @@ body {
     pointer-events: none;
     z-index: -2;
     overflow: hidden;
-    background: #080a0f;
+    background: #070b12;
 }
 
 .background-stage__layer {
@@ -261,4 +262,4 @@ body.background-transitioning .background-stage__layer--transition {
         animation: none !important;
     }
 }
-
+

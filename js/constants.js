@@ -152,17 +152,26 @@ export const API = {
             const data = await API.fetchJson(url);
             const list = Array.isArray(data) ? data : (data && Array.isArray(data.results) ? data.results : null);
             if (!list) throw new Error(data?.error || "搜索结果格式错误");
-            return list.map(song => ({
-                id: song.id,
-                name: song.name,
-                artist: song.artist,
-                album: song.album,
-                pic_id: song.pic_id,
-                url_id: song.url_id,
-                lyric_id: song.lyric_id,
-                source: song.source || source,
-                duration: song.duration,
-            }));
+            return list.map(song => {
+                const rawPic = song.pic_id || "";
+                // YouTube：用视频缩略图（480x360）当封面，比频道头像清晰
+                const ytCover = song.id ? `https://i.ytimg.com/vi/${song.id}/hqdefault.jpg` : rawPic;
+                const proxiedPic = source === "youtube" && ytCover
+                    ? `/api/music?type=img&u=${encodeURIComponent(ytCover)}`
+                    : rawPic;
+                return {
+                    id: song.id,
+                    name: song.name,
+                    artist: song.artist,
+                    album: song.album,
+                    pic_id: proxiedPic,
+                    pic: proxiedPic,
+                    url_id: song.url_id,
+                    lyric_id: song.lyric_id,
+                    source: song.source || source,
+                    duration: song.duration,
+                };
+            });
         }
 
         const signature = API.generateSignature();
@@ -252,7 +261,8 @@ export const API = {
 
     getSongUrl: (song, quality = "320") => {
         if (song.source === "youtube") {
-            return `/api/music?type=url&source=youtube&id=${encodeURIComponent(song.id)}&br=${quality}`;
+            // 直接给音频流（服务器取票 / VPS 中继），<audio> 原生播放
+            return `/api/music?type=stream&source=youtube&id=${encodeURIComponent(song.id)}&br=${quality}`;
         }
         const signature = API.generateSignature();
         return `${API.baseUrl}?types=url&id=${song.id}&source=${song.source || "netease"}&br=${quality}&s=${signature}`;
@@ -268,8 +278,10 @@ export const API = {
 
     getPicUrl: (song) => {
         if (song.source === "youtube") {
-            const pic = encodeURIComponent(song.pic_id || `https://i.ytimg.com/vi/${song.id}/mqdefault.jpg`);
-            return `/api/music?type=img&u=${pic}`;
+            const raw = song.pic_id || song.pic || `https://i.ytimg.com/vi/${song.id}/mqdefault.jpg`;
+            // 搜索结果里已经是同源图片代理地址时直接复用
+            if (typeof raw === "string" && raw.startsWith("/api/")) return raw;
+            return `/api/music?type=img&u=${encodeURIComponent(raw)}`;
         }
         const signature = API.generateSignature();
         return `${API.baseUrl}?types=pic&id=${song.pic_id}&source=${song.source || "netease"}&size=300&s=${signature}`;

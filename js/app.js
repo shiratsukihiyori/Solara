@@ -177,7 +177,8 @@ export async function updateCurrentSongInfo(song, options = {}) {
     if (loadArtwork) {
         try {
             const cacheKey = `${song.source || 'netease'}_${song.pic_id || song.id}`;
-            const isDirectUrl = (val) => typeof val === "string" && (val.startsWith("http://") || val.startsWith("https://") || val.startsWith("//"));
+            const isDirectUrl = (val) => typeof val === "string"
+                && (val.startsWith("http://") || val.startsWith("https://") || val.startsWith("//") || val.startsWith("/api/"));
 
             // 1. 优先命中前端内存缓存（0 网络请求）
             if (coverPicMemoryCache.has(cacheKey)) {

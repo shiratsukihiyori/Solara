@@ -312,21 +312,30 @@ export async function playSong(song, options = {}, state, dom, callbacks = {}, d
             }
             log(`[音频解析] 请求接口: ${audioUrl}`);
 
-            const audioData = await API.fetchJson(audioUrl);
-            if (myToken !== currentPlaybackToken) {
-                return;
-            }
+            if (song.source === "youtube") {
+                // YouTube：接口本身就是音频流（服务器取票 / VPS 中继），不需要再解析 JSON
+                originalAudioUrl = audioUrl;
+                audioUrlMemoryCache.set(cacheKey, {
+                    url: originalAudioUrl,
+                    timestamp: Date.now()
+                });
+            } else {
+                const audioData = await API.fetchJson(audioUrl);
+                if (myToken !== currentPlaybackToken) {
+                    return;
+                }
 
-            if (!audioData || !audioData.url) {
-                throw new Error('无法获取音频播放地址');
-            }
+                if (!audioData || !audioData.url) {
+                    throw new Error('无法获取音频播放地址');
+                }
 
-            originalAudioUrl = audioData.url;
-            // 存入短期缓存（15分钟有效）
-            audioUrlMemoryCache.set(cacheKey, {
-                url: originalAudioUrl,
-                timestamp: Date.now()
-            });
+                originalAudioUrl = audioData.url;
+                // 存入短期缓存（15分钟有效）
+                audioUrlMemoryCache.set(cacheKey, {
+                    url: originalAudioUrl,
+                    timestamp: Date.now()
+                });
+            }
         }
 
         log(`[音频地址] 解析就绪: ${originalAudioUrl.slice(0, 50)}...`);
@@ -591,6 +600,21 @@ export function playPrevious(state, dom, callbacks = {}) {
 
 export async function downloadSong(song, quality = "320", dom = null) {
     try {
+        const artistText = Array.isArray(song.artist) ? song.artist.join(", ") : (song.artist || "未知艺术家");
+
+        if (song.source === "youtube") {
+            showNotification("正在准备下载...", "info", dom);
+            const link = document.createElement("a");
+            link.href = `/api/music?type=stream&source=youtube&id=${encodeURIComponent(song.id)}`;
+            link.download = `${song.name} - ${artistText}.m4a`;
+            link.target = "_blank";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showNotification("下载已开始（m4a）", "success", dom);
+            return;
+        }
+
         showNotification("正在准备下载...", "info", dom);
 
         const audioUrl = API.getSongUrl(song, quality);

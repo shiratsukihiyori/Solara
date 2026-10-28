@@ -190,6 +190,19 @@ export async function loadLyrics(song, state, dom, debugLogger = null) {
     };
 
     if (!song) return;
+
+    if (song.source === "youtube") {
+        setLyricsContentHtml("<div>不支持歌词</div>", dom);
+        if (dom.lyrics) {
+            dom.lyrics.classList.add("empty");
+            dom.lyrics.dataset.placeholder = "message";
+        }
+        state.lyricsData = [];
+        state.currentLyricLine = -1;
+        log("[歌词] YouTube 源不支持歌词");
+        return;
+    }
+
     const cacheKey = `${song.source || 'netease'}_${song.lyric_id || song.id}`;
 
     // 1. 优先命中前端内存缓存（0 网络请求）
