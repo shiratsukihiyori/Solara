@@ -14,3 +14,6 @@
 @import url("components/player-stage.css");
 @import url("components/controls.css");
 @import url("components/modals.css");
+
+/* 4. 白月日和品牌皮肤（最后加载，覆盖上游默认布局观感） */
+@import url("brand/skin.css");

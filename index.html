@@ -52,8 +52,8 @@
         (function () {
             try {
                 var saved = localStorage.getItem("theme");
-                var dark = saved ? saved === "dark"
-                    : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+                // 默认夜空主题（不再跟随系统，避免一进来是上游浅色）
+                var dark = saved ? saved === "dark" : true;
                 window.__SOLARA_BOOT_DARK__ = dark;
             } catch (e) {
                 window.__SOLARA_BOOT_DARK__ = true;
@@ -219,7 +219,7 @@
                     <h1 class="header-logo">SOLARA</h1>
                     <span class="header-badge">白月日和</span>
                 </div>
-                <div class="warning">白月日和 · Hiyori Remix　音乐来自公开接口，仅供学习交流，请支持正版。</div>
+                <div class="warning">白月日和 · Hiyori Remix</div>
             </div>
             <div class="header-actions">
                 <button id="themeToggleButton" class="theme-toggle-button" type="button" aria-label="切换深浅色模式" title="切换深浅色模式">
