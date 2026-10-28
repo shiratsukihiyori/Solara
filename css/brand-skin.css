@@ -1382,3 +1382,35 @@ body::after,
         box-shadow: 0 8px 22px rgba(255, 233, 168, .25) !important;
     }
 }
+
+/* ── 背景回补：夜空要有夜色，动态封面层留一点氛围 ───────── */
+body,
+.background-stage,
+.background-stage__layer--base {
+    background:
+        radial-gradient(1100px 640px at 16% -12%, rgba(47, 122, 99, .38), transparent 60%),
+        radial-gradient(900px 560px at 88% 2%, rgba(244, 143, 177, .22), transparent 62%),
+        radial-gradient(820px 520px at 52% 112%, rgba(233, 201, 107, .20), transparent 62%),
+        linear-gradient(180deg, #0c1219 0%, #080c12 55%, #05070b 100%) !important;
+}
+
+/* 封面动态底色：保留但压成氛围光 */
+.background-stage__layer--transition {
+    background: var(--bg-gradient-next, none) !important;
+    opacity: .30 !important;
+    filter: blur(70px) saturate(120%) !important;
+    transform: scale(1.15);
+}
+
+/* 星点可见度 */
+body::after,
+.background-stage::after {
+    opacity: .55 !important;
+}
+
+/* 卡片稍微透一点，让背景透出来 */
+.container {
+    background: rgba(18, 20, 24, .62) !important;
+    backdrop-filter: blur(34px) saturate(170%) !important;
+    -webkit-backdrop-filter: blur(34px) saturate(170%) !important;
+}
