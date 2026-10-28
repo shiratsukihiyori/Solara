@@ -4974,6 +4974,12 @@ function displaySearchResults(newItems, options = {}) {
         container.innerHTML = "";
         state.renderedSearchCount = 0;
         resetSelectedSearchResults();
+        const head = document.createElement("div");
+        head.className = "search-results-head";
+        const total = Number(options.totalCount ?? state.searchResults.length ?? newItems.length) || newItems.length;
+        const srcLabel = ({ youtube: "YouTube Music", kuwo: "酷我音乐", netease: "网易云音乐", bilibili: "哔哩哔哩" })[state.searchSource] || "音乐";
+        head.innerHTML = `<span><b>${total}</b> 首</span><span>${srcLabel}</span>`;
+        container.appendChild(head);
     }
 
     const existingLoadMore = container.querySelector("#loadMoreBtn");
@@ -7699,3 +7705,44 @@ document.addEventListener("DOMContentLoaded", () => {
         initSettings();
     }
 });
+
+// 移动端底部导航（按方向稿：搜索 / 雷达 / 播放 / 收藏 / 设置）
+(function initMobileNav() {
+    function build() {
+        if (!document.body.classList.contains("mobile-view")) return;
+        if (document.getElementById("mBottomNav")) return;
+        const nav = document.createElement("nav");
+        nav.id = "mBottomNav";
+        nav.className = "m-nav";
+        const items = [
+            { key: "search", icon: "fa-magnifying-glass", label: "搜索", run: () => document.getElementById("mobileSearchToggle")?.click() },
+            { key: "radar", icon: "fa-satellite-dish", label: "雷达", run: () => document.getElementById("loadOnlineBtn")?.click() },
+            { key: "play", icon: "fa-compact-disc", label: "播放", run: () => document.getElementById("mobileSearchClose")?.click() },
+            { key: "fav", icon: "fa-heart", label: "收藏", run: () => document.getElementById("favoritesTab")?.click() },
+            { key: "settings", icon: "fa-gear", label: "设置", run: () => document.getElementById("openSettingsBtn")?.click() },
+        ];
+        items.forEach((it) => {
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.dataset.key = it.key;
+            btn.innerHTML = `<i class="fas ${it.icon}" aria-hidden="true"></i><span>${it.label}</span>`;
+            btn.addEventListener("click", it.run);
+            nav.appendChild(btn);
+        });
+        document.body.appendChild(nav);
+        document.body.classList.add("has-m-nav");
+    }
+    function renameSearchTitle() {
+        if (!document.body.classList.contains("mobile-view")) return;
+        const title = document.querySelector(".search-title");
+        if (title) title.textContent = "搜索";
+        const barTitle = document.getElementById("mobileToolbarTitle");
+        if (barTitle) barTitle.textContent = "正在播放";
+    }
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => { setTimeout(build, 400); setTimeout(renameSearchTitle, 600); });
+    } else {
+        setTimeout(build, 400);
+        setTimeout(renameSearchTitle, 600);
+    }
+})();

@@ -700,3 +700,287 @@ body:not(.dark-mode) .header h1 {
         padding: 0 2px !important;
     }
 }
+
+/* ══════════════════════════════════════════════════════════
+   移动端：按方向稿重排（顶部栏 / 搜索面板 / 结果行 / 底部导航）
+   ══════════════════════════════════════════════════════════ */
+@media (max-width: 820px) {
+    /* 顶部：只留一条简洁标题栏 */
+    body.mobile-view .header { display: none !important; }
+
+    body.mobile-view .mobile-toolbar {
+        position: relative;
+        z-index: 5;
+        padding: 6px 4px 10px;
+        background: transparent;
+        border: none;
+    }
+
+    body.mobile-view .mobile-toolbar__title {
+        font-size: 13px;
+        letter-spacing: .22em;
+        color: rgba(238, 244, 242, .72);
+        text-transform: uppercase;
+    }
+
+    body.mobile-view .mobile-toolbar__button {
+        width: 34px;
+        height: 34px;
+        border-radius: 11px;
+        background: rgba(255, 255, 255, .05);
+        border: 1px solid rgba(255, 255, 255, .08);
+        color: rgba(226, 238, 234, .7);
+    }
+
+    /* 搜索面板 */
+    body.mobile-view .search-area {
+        background: rgba(9, 15, 23, .72) !important;
+        border: 1px solid rgba(255, 255, 255, .08) !important;
+        border-radius: 20px !important;
+        padding: 14px 12px 10px !important;
+        margin: 0 !important;
+    }
+
+    body.mobile-view .search-title {
+        font-size: 18px;
+        letter-spacing: .06em;
+        color: #eef4f2;
+    }
+
+    /* 搜索行：输入框 + 源胶囊 合成一条 */
+    body.mobile-view .search-bar-unified {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, .05);
+        border: 1px solid rgba(255, 255, 255, .1);
+        border-radius: 12px;
+        padding: 4px 6px 4px 12px;
+        height: 42px;
+    }
+
+    body.mobile-view .search-input-wrapper {
+        background: transparent !important;
+        border: none !important;
+        height: auto !important;
+        padding: 0 !important;
+        flex: 1;
+    }
+
+    body.mobile-view .search-input {
+        font-size: 13px !important;
+        height: 30px !important;
+    }
+
+    body.mobile-view .source-select-wrapper {
+        flex: none;
+    }
+
+    body.mobile-view .source-select-btn {
+        height: 28px !important;
+        padding: 0 10px !important;
+        border-radius: 999px !important;
+        font-size: 11px !important;
+        background: rgba(79, 209, 165, .08) !important;
+        border: 1px solid rgba(79, 209, 165, .3) !important;
+        color: var(--brand-green) !important;
+    }
+
+    body.mobile-view .search-btn {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+        padding: 0 !important;
+        border-radius: 11px !important;
+        font-size: 13px;
+    }
+
+    body.mobile-view .search-btn span { display: none; }
+
+    /* 导入已选：收成一行小按钮 */
+    body.mobile-view .search-results-toolbar {
+        padding: 6px 0 2px !important;
+        min-height: 0;
+    }
+
+    body.mobile-view .import-selected-btn {
+        height: 26px;
+        padding: 0 10px !important;
+        font-size: 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .04);
+        border: 1px solid rgba(255, 255, 255, .08);
+        color: rgba(226, 238, 234, .6);
+    }
+
+    /* 结果头：N 首 + 来源 */
+    .search-results-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 6px 6px;
+        font-size: 11.5px;
+        color: rgba(226, 238, 234, .45);
+        letter-spacing: .04em;
+    }
+
+    .search-results-head b { color: var(--brand-moon); font-weight: 600; }
+
+    /* 结果行 */
+    body.mobile-view .search-result-item {
+        grid-template-columns: 44px minmax(0, 1fr) 28px !important;
+        gap: 11px !important;
+        padding: 9px 6px !important;
+        border-bottom: 1px solid rgba(255, 255, 255, .05) !important;
+    }
+
+    body.mobile-view .search-result-cover {
+        width: 44px !important;
+        height: 44px !important;
+        border-radius: 12px !important;
+    }
+
+    body.mobile-view .search-result-title {
+        font-size: 13.5px !important;
+        font-weight: 500 !important;
+        color: #eef4f2 !important;
+    }
+
+    body.mobile-view .search-result-artist {
+        font-size: 11px !important;
+        color: rgba(226, 238, 234, .48) !important;
+    }
+
+    body.mobile-view .search-result-meta,
+    body.mobile-view .search-result-select,
+    body.mobile-view .search-result-actions .play,
+    body.mobile-view .search-result-actions .download {
+        display: none !important;
+    }
+
+    body.mobile-view .search-result-actions {
+        display: flex !important;
+        width: auto !important;
+    }
+
+    body.mobile-view .search-result-actions .favorite {
+        width: 28px !important;
+        height: 28px !important;
+        color: rgba(226, 238, 234, .4) !important;
+        font-size: 14px;
+    }
+
+    /* 底部导航 */
+    .m-nav {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: calc(56px + env(safe-area-inset-bottom, 0px));
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        display: flex;
+        align-items: center;
+        justify-content: space-around;
+        background: rgba(7, 11, 18, .94);
+        backdrop-filter: blur(22px);
+        -webkit-backdrop-filter: blur(22px);
+        border-top: 1px solid rgba(255, 255, 255, .07);
+        z-index: 60;
+    }
+
+    .m-nav button {
+        background: none;
+        border: none;
+        color: rgba(226, 238, 234, .42);
+        font-size: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        padding: 6px 10px;
+        letter-spacing: .06em;
+    }
+
+    .m-nav button i { font-size: 15px; }
+
+    .m-nav button:active { color: var(--brand-moon); }
+
+    body.has-m-nav {
+        padding-bottom: 64px;
+    }
+
+    body.has-m-nav .controls {
+        margin-bottom: 56px;
+    }
+}
+
+/* ── 手机端播放页：方形大封面 + 底部不被导航遮住 ───────── */
+@media (max-width: 820px) {
+    body.mobile-view .mobile-turntable__platter {
+        width: min(84vw, 350px) !important;
+        border-radius: 26px !important;
+        background: #0f1620 !important;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, .5) !important;
+        animation: none !important;
+        overflow: hidden;
+    }
+
+    body.mobile-view .mobile-turntable__platter::before,
+    body.mobile-view .mobile-turntable__platter::after {
+        display: none !important;
+    }
+
+    body.mobile-view .mobile-turntable .album-cover,
+    body.mobile-view .mobile-turntable .album-cover img {
+        width: 100% !important;
+        height: 100% !important;
+        border-radius: 26px !important;
+        object-fit: cover;
+    }
+
+    body.mobile-view .mobile-panel {
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    body.mobile-view .mobile-panel-header,
+    body.mobile-view .mobile-panel-handle {
+        display: none !important;
+    }
+
+    /* 搜索态：隐藏顶部工具栏与导入行，避免重影 */
+    body.mobile-view.mobile-search-open .mobile-toolbar,
+    body.mobile-view.mobile-search-open .search-results-toolbar {
+        display: none !important;
+    }
+
+    /* 底部导航不挡播放器 */
+    body.has-m-nav .container {
+        padding-bottom: 78px !important;
+        box-sizing: border-box;
+    }
+
+    body.has-m-nav .controls {
+        margin-bottom: 0 !important;
+    }
+
+    /* 心形收藏按钮显形 */
+    body.mobile-view .search-result-actions .favorite {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        color: rgba(244, 143, 177, .75) !important;
+    }
+}
+
+@media (max-width: 820px) {
+    /* 播放页标题前的均衡器小点隐藏 */
+    body.mobile-view .player-eq { display: none !important; }
+
+    /* 播放页时间与进度更紧凑 */
+    body.mobile-view .progress-details {
+        padding: 0 6px;
+        font-size: 10.5px;
+    }
+}
