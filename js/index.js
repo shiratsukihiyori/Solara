@@ -4493,7 +4493,11 @@ async function performSearch(isLiveSearch = false) {
 
         state.hasMoreResults = source === "youtube" ? !!API._ytHasMore : results.length === 20;
 
-        // 显示搜索结果
+        // 显示搜索结果：新搜索把列表滚回顶部
+        if (state.searchPage === 1) {
+            const listEl = dom.searchResultsList || dom.searchResults;
+            if (listEl) listEl.scrollTop = 0;
+        }
         displaySearchResults(results, {
             reset: state.searchPage === 1,
             totalCount: state.searchResults.length,

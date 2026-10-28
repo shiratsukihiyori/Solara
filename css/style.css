@@ -134,8 +134,10 @@ body {
     grid-template-areas: 
         "header header header"
         "search search search"
-        "search search search"
         "controls controls controls";
+    /* 结果列表自己滚动，不让内容把容器撑破 */
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
 }
 
 .header { 
@@ -200,6 +202,8 @@ body {
     -webkit-backdrop-filter: blur(20px);
     box-shadow: 0 10px 40px rgba(0,0,0,0.2);
     border: 2px solid var(--primary-color);
+    min-height: 0;
+    overflow: hidden;
 }
 
 .search-header {
@@ -505,12 +509,30 @@ body {
 /* 搜索模式下的搜索结果 */
 .container.search-mode .search-results {
     max-height: none;
-    height: 100%;
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
     padding-top: 15px;
     padding-bottom: 20px;
     opacity: 1;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+}
+
+/* 结果列表滚动条（夜空主题） */
+.container.search-mode .search-results::-webkit-scrollbar {
+    width: 8px;
+}
+
+.container.search-mode .search-results::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+}
+
+.container.search-mode .search-results::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }
 
 .search-result-item {
@@ -1987,7 +2009,13 @@ input[type="range"] {
     box-shadow: 0 12px 34px rgba(0, 0, 0, 0.6);
 }
 
+/* 隐藏时不占位：否则它会撑出 166px 的页面滚动，把搜索面板顶出屏幕 */
+.player-quality-menu:not(.show) {
+    display: none;
+}
+
 .player-quality-menu.show {
+    display: block;
     opacity: 1;
     visibility: visible;
     transform: translateY(0);
