@@ -742,6 +742,18 @@ if (type === "img") {
           ytmVisitor = { data: "", expires: 0 };
           if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 200));
         }
+        // ② 服务器中继（VPS + 订阅出口 + yt-dlp）：Worker 取票失败时交给它
+        const relay = String((context.env as any)?.YT_RELAY_BASE || "");
+        if (relay) {
+          try {
+            const relayUrl = `${relay.replace(/\/$/, "")}/audio?id=${encodeURIComponent(id)}`;
+            const resp = await streamProxy(relayUrl, request);
+            if (resp.status === 200 || resp.status === 206) return resp;
+          } catch {
+            // 继续走错误分支
+          }
+        }
+
         if (lastBotCheck) {
           return jsonResponse({ error: "youtube_bot_check", needVerify: true }, 403);
         }
